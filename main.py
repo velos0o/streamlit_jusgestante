@@ -9,6 +9,14 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'config'))
 from src.data_service import DataService
 from config.funis_config import FunilConfig
 
+# --- Configuração de Roteamento ---
+PAGE_URL_MAP = {
+    "comercial": "🏢 Relatório Comercial",
+    "administrativo": "📋 Trâmites Administrativos",
+    "audiencia": "⚖️ Relatório de Audiência",
+}
+PAGE_STATE_TO_URL_MAP = {v: k for k, v in PAGE_URL_MAP.items()}
+# --- Fim Configuração de Roteamento ---
 
 def load_styles():
     """Carrega estilos CSS personalizados"""
@@ -132,15 +140,30 @@ def render_sidebar_navigation():
         
         # Botão para selecionar o Relatório Comercial
         if st.button("🏢 Relatório Comercial", key="relatorio_comercial_btn", use_container_width=True):
-            st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
+            if st.session_state.get('pagina_selecionada') != "🏢 Relatório Comercial":
+                st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
+                new_url_param = PAGE_STATE_TO_URL_MAP.get("🏢 Relatório Comercial")
+                if new_url_param:
+                    st.query_params.pagina = new_url_param
+                st.rerun()
             
         # Novo Botão para Trâmites Administrativos
         if st.button("📋 Trâmites Administrativos", key="relatorio_administrativo_btn", use_container_width=True):
-            st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
+            if st.session_state.get('pagina_selecionada') != "📋 Trâmites Administrativos":
+                st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
+                new_url_param = PAGE_STATE_TO_URL_MAP.get("📋 Trâmites Administrativos")
+                if new_url_param:
+                    st.query_params.pagina = new_url_param
+                st.rerun()
 
         # Novo Botão para Relatório de Audiência
         if st.button("⚖️ Relatório de Audiência", key="relatorio_audiencia_btn", use_container_width=True):
-            st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
+            if st.session_state.get('pagina_selecionada') != "⚖️ Relatório de Audiência":
+                st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
+                new_url_param = PAGE_STATE_TO_URL_MAP.get("⚖️ Relatório de Audiência")
+                if new_url_param:
+                    st.query_params.pagina = new_url_param
+                st.rerun()
 
         # O estado da página é gerenciado via st.session_state
 
@@ -149,8 +172,30 @@ def main():
     setup_page()
     load_styles()
     
-    if 'pagina_selecionada' not in st.session_state:
-        st.session_state.pagina_selecionada = "🏢 Relatório Comercial" 
+    # --- Lógica de Roteamento ---
+    url_page_param = st.query_params.get("pagina")
+
+    # Prioridade 1: URL param para definir o estado, se válido e diferente do estado atual, ou se estado não existe.
+    if url_page_param and url_page_param in PAGE_URL_MAP:
+        if st.session_state.get('pagina_selecionada') != PAGE_URL_MAP[url_page_param]:
+            st.session_state.pagina_selecionada = PAGE_URL_MAP[url_page_param]
+            # Não fazer st.rerun() aqui para evitar loop se set_query_params abaixo também causar rerun.
+            # A mudança de estado será refletida naturalmente no fluxo da página.
+    elif 'pagina_selecionada' not in st.session_state:
+        # Prioridade 2: Se nenhum URL param válido e o estado não existe, definir padrão.
+        st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
+
+    # Garantir que a URL reflita o estado atual (canônico)
+    # Isso é útil se o estado foi definido por padrão ou se a URL estava "suja"
+    current_page_in_state = st.session_state.get('pagina_selecionada', "🏢 Relatório Comercial") # Default if somehow still not set
+    expected_url_param_for_state = PAGE_STATE_TO_URL_MAP.get(current_page_in_state)
+
+    if expected_url_param_for_state and url_page_param != expected_url_param_for_state:
+        st.query_params.pagina = expected_url_param_for_state
+        # Se set_query_params não causar um rerun que atualize get_query_params para o próximo ciclo,
+        # e isso for um problema, um st.rerun() PODE ser necessário aqui, mas use com cautela.
+        # Para a maioria dos casos, Streamlit lida bem com a atualização da URL e o estado interno.
+    # --- Fim Lógica de Roteamento ---
     
     render_sidebar_navigation()
     

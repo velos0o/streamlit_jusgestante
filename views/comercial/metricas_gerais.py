@@ -5,7 +5,7 @@ from datetime import date, timedelta
 # Importações de serviços e configurações
 from src.data_service import DataService
 
-def render_metricas_gerais(df: pd.DataFrame, data_venda_inicio, data_venda_fim, aplicar_filtro_data_venda):
+def render_metricas_gerais(df: pd.DataFrame):
     """Renderiza métricas simplificadas do funil comercial"""
     st.markdown("---")
     st.subheader("Métricas")
@@ -24,15 +24,18 @@ def render_metricas_gerais(df: pd.DataFrame, data_venda_inicio, data_venda_fim, 
         # Inicia a condição de filtro com IS_WON
         condicao_filtro = (df['IS_WON'] == True)
 
-        # Adiciona a condição de data de venda se o filtro estiver ativado
-        if aplicar_filtro_data_venda:
-            condicao_filtro &= \
-                (df['UF_CRM_DATA_FECHAMENTO1'].notna()) & \
-                (df['UF_CRM_DATA_FECHAMENTO1'] >= data_venda_inicio) & \
-                (df['UF_CRM_DATA_FECHAMENTO1'] <= data_venda_fim)
-            estrategia_usada = "IS_WON e UF_CRM_DATA_FECHAMENTO1 entre {} e {}".format(data_venda_inicio, data_venda_fim)
-        else:
-            estrategia_usada = "IS_WON (sem filtro de data de venda)"
+        # A estratégia agora é sempre baseada apenas em IS_WON
+        estrategia_usada = "IS_WON"
+
+        # Remove a condição de data de venda, independentemente do filtro estar ativado
+        # if aplicar_filtro_data_venda:
+        #     condicao_filtro &= \
+        #         (df['UF_CRM_DATA_FECHAMENTO1'].notna()) & \
+        #         (df['UF_CRM_DATA_FECHAMENTO1'] >= data_venda_inicio) & \
+        #         (df['UF_CRM_DATA_FECHAMENTO1'] <= data_venda_fim)
+        #     estrategia_usada = "IS_WON e UF_CRM_DATA_FECHAMENTO1 entre {} e {}".format(data_venda_inicio, data_venda_fim)
+        # else:
+        #     estrategia_usada = "IS_WON (sem filtro de data de venda)"
 
         # Aplica o filtro
         fechados_filtrados = df[condicao_filtro]

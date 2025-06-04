@@ -18,7 +18,101 @@ class DataService:
     def __init__(self):
         self._connector = BitrixConnector()
         self._cache = BitrixDataCache()
+        self._stage_mapping = self._build_stage_mapping() # Pré-calcula o stage_mapping
     
+    def _build_stage_mapping(self) -> Dict[str, str]:
+        """Constrói o mapeamento de stage ID para stage name uma vez."""
+        mapping = {}
+        try:
+            all_categories = FunilConfig.get_all_categories()
+            if all_categories: # Verifica se não é None ou vazio
+                for category in all_categories.values():
+                    if category and hasattr(category, 'stages') and category.stages: # Verifica se category e stages são válidos
+                        for stage in category.stages:
+                            if stage and hasattr(stage, 'stage_id') and hasattr(stage, 'stage_name'): # Verifica atributos do stage
+                                key = f"{category.category_id}_{stage.stage_id}"
+                                mapping[key] = stage.stage_name
+            else:
+                st.warning("FunilConfig.get_all_categories() retornou vazio ou None. Stage mapping estará incompleto.")
+        except Exception as e:
+            st.error(f"Erro ao construir stage_mapping a partir de FunilConfig: {e}")
+        return mapping
+
+    def get_minimal_data_for_selectors(self, category_ids: List[int], 
+                                       fields_to_extract: List[str],
+                                       start_date: Optional[date] = None,
+                                       end_date: Optional[date] = None) -> pd.DataFrame:
+        """
+        Obtém dados mínimos (colunas específicas) para popular seletores,
+        evitando o processamento pesado de _process_deals_data.
+        """
+        cache_key_prefix = "selectors_minimal"
+        # Usar uma representação de string consistente para fields_to_extract na chave de cache
+        fields_key = "_".join(sorted(fields_to_extract))
+        
+        cache_key = self._cache.get_cache_key(
+            cache_key_prefix, 
+            f"cat_{'-'.join(map(str, category_ids))}_fields_{fields_key}_dates_{start_date}_{end_date}"
+        )
+        
+        cached_data = self._cache.get_cached_data(cache_key)
+        if cached_data is not None:
+            return cached_data
+
+        date_range_obj = None
+        if start_date and end_date:
+            date_range_obj = DateRange(
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d')
+            )
+
+        # Obtém dados brutos do Bitrix (sem processamento pesado ainda)
+        # O BitrixConnector.get_deals_data atualmente não suporta 'select fields',
+        # então ele sempre traz todas as colunas. Filtramos depois.
+        deals_df_raw = self._connector.get_deals_data(
+            category_ids=category_ids, # O filtro de categoria é aplicado dentro do get_deals_data após o fetch
+            date_range=date_range_obj  # O filtro de data também é aplicado pós-fetch
+        )
+
+        if deals_df_raw.empty:
+            self._cache.set_cache_data(cache_key, pd.DataFrame(columns=fields_to_extract))
+            return pd.DataFrame(columns=fields_to_extract)
+
+        # DataFrame para armazenar os resultados com as colunas desejadas
+        result_df = pd.DataFrame()
+        
+        available_columns = []
+
+        # Extrai STAGE_NAME se solicitado e possível
+        if 'STAGE_NAME' in fields_to_extract:
+            if 'CATEGORY_ID' in deals_df_raw.columns and 'STAGE_ID' in deals_df_raw.columns:
+                # Certificar que são strings para a chave do mapa
+                deals_df_raw['STAGE_KEY_TEMP'] = deals_df_raw['CATEGORY_ID'].astype(str) + '_' + deals_df_raw['STAGE_ID'].astype(str)
+                result_df['STAGE_NAME'] = deals_df_raw['STAGE_KEY_TEMP'].map(self._stage_mapping).fillna('INDEFINIDO')
+                deals_df_raw.drop('STAGE_KEY_TEMP', axis=1, inplace=True)
+                available_columns.append('STAGE_NAME')
+            elif 'STAGE_NAME' in deals_df_raw.columns: # Caso já exista (pouco provável com biconnector puro)
+                 result_df['STAGE_NAME'] = deals_df_raw['STAGE_NAME']
+                 available_columns.append('STAGE_NAME')
+
+
+        # Extrai outras colunas diretamente se existirem
+        for field in fields_to_extract:
+            if field != 'STAGE_NAME' and field in deals_df_raw.columns:
+                result_df[field] = deals_df_raw[field]
+                if field not in available_columns:
+                    available_columns.append(field)
+        
+        # Garante que todas as colunas solicitadas existam no result_df, mesmo que vazias
+        for field in fields_to_extract:
+            if field not in result_df.columns:
+                result_df[field] = pd.NA # Ou pd.Series(dtype='object') ou apropriado
+
+        final_df = result_df[available_columns].copy() # Apenas colunas que foram de fato populadas
+
+        self._cache.set_cache_data(cache_key, final_df)
+        return final_df
+
     def get_deals_by_category(self, category_ids: List[int], 
                              start_date: Optional[date] = None,
                              end_date: Optional[date] = None) -> pd.DataFrame:
@@ -143,7 +237,7 @@ class DataService:
                 # Tenta converter para datetime. O formato 'dd/mm/yyyy' será tratado se pd.to_datetime inferir corretamente.
                 # Usar dayfirst=True se o formato for ambiguo e for de fato dd/mm/yyyy.
                 # Se o campo já for datetime ou timestamp numérico, pd.to_datetime geralmente lida bem.
-                df[DATA_AUDIENCIA_FIELD] = pd.to_datetime(df[DATA_AUDIENCIA_FIELD], errors='coerce', dayfirst=True) 
+                df[DATA_AUDIENCIA_FIELD] = pd.to_datetime(df[DATA_AUDIENCIA_FIELD], errors='coerce') 
                 # Apenas a data, zerando o componente de hora, ou .dt.date para objeto date.
                 # df[DATA_AUDIENCIA_FIELD] = df[DATA_AUDIENCIA_FIELD].dt.normalize() # Para manter como datetime64[ns] com hora 00:00:00
                 # Ou, para converter para objeto date do Python (pode ser mais simples para algumas manipulações)
@@ -195,16 +289,17 @@ class DataService:
         
         # Se temos CATEGORY_ID e STAGE_ID, tenta mapear com configuração
         if 'CATEGORY_ID' in df.columns and 'STAGE_ID' in df.columns:
-            stage_mapping = {}
+            # stage_mapping = {} # Removida a criação local
             
-            for category in FunilConfig.get_all_categories().values():
-                for stage in category.stages:
-                    key = f"{category.category_id}_{stage.stage_id}"
-                    stage_mapping[key] = stage.stage_name
+            # for category in FunilConfig.get_all_categories().values():
+            #     for stage in category.stages:
+            #         key = f"{category.category_id}_{stage.stage_id}"
+            #         stage_mapping[key] = stage.stage_name
             
             # Aplica mapeamento se disponível
+            # Usa o self._stage_mapping pré-calculado
             df['STAGE_KEY'] = df['CATEGORY_ID'].astype(str) + '_' + df['STAGE_ID'].astype(str)
-            mapped_names = df['STAGE_KEY'].map(stage_mapping)
+            mapped_names = df['STAGE_KEY'].map(self._stage_mapping) 
             
             # Usa mapeamento da configuração se disponível, senão mantém o existente
             if 'STAGE_NAME' in df.columns:

@@ -35,7 +35,9 @@ def display_agenda_audiencia_tab(df_audiencia: pd.DataFrame):
         index=0 # Seleciona o ano mais recente por padrão
     )
 
-    df_filtrado_ano = df_agenda[df_agenda[DATA_AUDIENCIA_FIELD].dt.year == ano_selecionado]
+    # df_filtrado_ano = df_agenda[df_agenda[DATA_AUDIENCIA_FIELD].dt.year == ano_selecionado]
+    # Para evitar SettingWithCopyWarning, fazemos uma cópia explícita se vamos adicionar colunas
+    df_filtrado_ano = df_agenda[df_agenda[DATA_AUDIENCIA_FIELD].dt.year == ano_selecionado].copy()
 
     if df_filtrado_ano.empty:
         st.info(f"Nenhuma audiência encontrada para o ano de {ano_selecionado}.")
