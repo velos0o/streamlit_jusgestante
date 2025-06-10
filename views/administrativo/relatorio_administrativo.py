@@ -13,11 +13,13 @@ from config.funis_config import FunilConfig # Importar FunilConfig
 # Funções dos sub-dashboards que serão criadas
 from views.administrativo.funil_administrativo import render_funil_administrativo
 from views.administrativo.analise_responsaveis_administrativo import render_analise_responsaveis_administrativo
+from views.administrativo.distribuicao_clientes_administrativo import render_distribuicao_clientes_administrativo
 
 # Mapeamento para sub-páginas (abas) do relatório Administrativo
 SUB_PAGE_URL_MAP_ADM = {
     "visao_funil_adm": "Visão do Funil",
     "analise_responsavel_adm": "Análise por Responsável",
+    "distribuicao_clientes_adm": "Distribuição de Clientes"
 }
 SUB_PAGE_STATE_TO_URL_MAP_ADM = {v: k for k, v in SUB_PAGE_URL_MAP_ADM.items()}
 
@@ -117,22 +119,26 @@ def render_relatorio_administrativo():
             else:
                 df_administrativo = data_service.get_tramites_data(None, None) # Carrega todos os dados se filtro de data não aplicado
             
+            # Carrega os dados de trâmites (CATEGORY_ID = 2) para a aba de distribuição.
+            # Anteriormente estava buscando get_comercial_data().
+            df_distribuicao = data_service.get_tramites_data()
+
+            df_administrativo_filtrado = pd.DataFrame() # DataFrame vazio por padrão
+
             if df_administrativo.empty:
                 st.warning("Nenhum dado encontrado para os trâmites administrativos com os filtros atuais.")
-                return
+            else:
+                # Aplica filtros de etapas e responsáveis em uma cópia
+                df_administrativo_filtrado = df_administrativo.copy()
+                if etapas_selecionadas_adm and 'STAGE_NAME' in df_administrativo_filtrado.columns:
+                    df_administrativo_filtrado = df_administrativo_filtrado[df_administrativo_filtrado['STAGE_NAME'].isin(etapas_selecionadas_adm)]
+                
+                if responsaveis_selecionados_adm and 'ASSIGNED_BY_NAME' in df_administrativo_filtrado.columns:
+                    df_administrativo_filtrado = df_administrativo_filtrado[df_administrativo_filtrado['ASSIGNED_BY_NAME'].isin(responsaveis_selecionados_adm)]
 
-            # Aplica filtros adicionais de etapas e responsáveis
-            if etapas_selecionadas_adm and 'STAGE_NAME' in df_administrativo.columns:
-                df_administrativo = df_administrativo[df_administrativo['STAGE_NAME'].isin(etapas_selecionadas_adm)]
-            
-            if responsaveis_selecionados_adm and 'ASSIGNED_BY_NAME' in df_administrativo.columns:
-                df_administrativo = df_administrativo[df_administrativo['ASSIGNED_BY_NAME'].isin(responsaveis_selecionados_adm)]
-
-            if df_administrativo.empty:
-                st.warning("Nenhum dado encontrado após aplicar os filtros de etapas e responsáveis.")
-                return
-            
-            st.success(f"{len(df_administrativo)} trâmites carregados.") # Linha de depuração temporária
+                if not df_administrativo_filtrado.empty:
+                    st.success(f"{len(df_administrativo_filtrado)} trâmites carregados após filtros.")
+                # O aviso de "nenhum dado" será tratado dentro de cada aba
 
             # --- Lógica de Roteamento para Sub-páginas com st.tabs ---
             st.markdown("## ") 
@@ -141,7 +147,7 @@ def render_relatorio_administrativo():
             
             # st.tabs não suporta `index` ou `value` para seleção inicial programática.
             # O primeiro tab sempre estará ativo no carregamento da página ou F5.
-            tab_funil_adm, tab_analise_resp_adm = st.tabs(tab_titles_adm)
+            tab_funil_adm, tab_analise_resp_adm, tab_distribuicao_cli_adm = st.tabs(tab_titles_adm)
 
             # Tenta manter o URL atualizado com o tab clicado.
             # Esta é uma heurística devido às limitações do st.tabs.
@@ -164,7 +170,10 @@ def render_relatorio_administrativo():
                      # Se este é o tab padrão, mas há um sub_pagina na URL, significa que precisamos limpar a URL
                      determined_active_tab_url_key = None 
                 
-                render_funil_administrativo(df_administrativo, ETAPAS_ADMINISTRATIVO_ORDEM)
+                if df_administrativo_filtrado.empty:
+                    st.warning("Não há dados para exibir o funil administrativo com os filtros selecionados.")
+                else:
+                    render_funil_administrativo(df_administrativo_filtrado, ETAPAS_ADMINISTRATIVO_ORDEM)
             
             with tab_analise_resp_adm:
                 # Se este tab está ativo, atualize o estado e prepare a chave URL
@@ -176,7 +185,21 @@ def render_relatorio_administrativo():
                     if st.session_state.current_administrativo_sub_page_display == tab_titles_adm[1]:
                          determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[1])
 
-                render_analise_responsaveis_administrativo(df_administrativo, ETAPAS_ADMINISTRATIVO_ORDEM)
+                if df_administrativo_filtrado.empty:
+                    st.warning("Não há dados para exibir a análise por responsável com os filtros selecionados.")
+                else:
+                    render_analise_responsaveis_administrativo(df_administrativo_filtrado, ETAPAS_ADMINISTRATIVO_ORDEM)
+
+            with tab_distribuicao_cli_adm:
+                # Lógica de estado para o novo tab
+                if st.session_state.current_administrativo_sub_page_display != tab_titles_adm[2]:
+                    st.session_state.current_administrativo_sub_page_display = tab_titles_adm[2]
+                    determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2])
+                elif st.query_params.get("sub_pagina") != SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2]):
+                    if st.session_state.current_administrativo_sub_page_display == tab_titles_adm[2]:
+                        determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2])
+
+                render_distribuicao_clientes_administrativo(df_distribuicao)
 
             # Atualiza o URL fora dos blocos 'with' para evitar múltiplos reruns
             current_url_sub_page = st.query_params.get("sub_pagina")
