@@ -141,9 +141,32 @@ def render_distribuicao_clientes_administrativo(df_distribuicao):
 
     df_filtrado['GRUPO_OPERADORAS'] = df_filtrado.apply(map_operadora, axis=1)
 
+    # --- Contagens Separadas ---
+    st.markdown("#### Contagem por Grupo e Responsável")
+
+    # Tabela para C/ ULTRASSOM
+    st.markdown("**Com Ultrassom**")
+    df_com_ultrassom = df_filtrado[df_filtrado['ULTRASSOM_STATUS'] == 'C/ ULTRASSOM']
+    if not df_com_ultrassom.empty:
+        contagem_com_ultrassom = df_com_ultrassom.groupby('ASSIGNED_BY_NAME').size().reset_index(name='Quantidade')
+        st.table(contagem_com_ultrassom)
+    else:
+        st.info("Nenhum cliente 'Com Ultrassom' encontrado para os filtros selecionados.")
+
+    # Tabela para S/ ULTRASSOM
+    st.markdown("**Sem Ultrassom**")
+    df_sem_ultrassom = df_filtrado[df_filtrado['ULTRASSOM_STATUS'] == 'S/ ULTRASSOM']
+    if not df_sem_ultrassom.empty:
+        contagem_sem_ultrassom = df_sem_ultrassom.groupby('ASSIGNED_BY_NAME').size().reset_index(name='Quantidade')
+        st.table(contagem_sem_ultrassom)
+    else:
+        st.info("Nenhum cliente 'Sem Ultrassom' encontrado para os filtros selecionados.")
+    
+    st.markdown("---")
+    
     st.markdown(f"**Total de Clientes Encontrados:** {len(df_filtrado)}")
 
-    # Exibição da tabela
+    # Exibição da tabela principal
     cols_to_display = [
         'ID',
         'TITLE',
@@ -167,25 +190,4 @@ def render_distribuicao_clientes_administrativo(df_distribuicao):
     # Garante que apenas colunas existentes sejam selecionadas
     cols_to_display_existing = [col for col in cols_to_display if col in df_filtrado.columns]
 
-    st.dataframe(df_filtrado[cols_to_display_existing].rename(columns=rename_map))
-
-    # --- Contagens Separadas ---
-    st.markdown("#### Contagem por Grupo e Responsável")
-
-    # Tabela para C/ ULTRASSOM
-    st.markdown("**Com Ultrassom**")
-    df_com_ultrassom = df_filtrado[df_filtrado['ULTRASSOM_STATUS'] == 'C/ ULTRASSOM']
-    if not df_com_ultrassom.empty:
-        contagem_com_ultrassom = df_com_ultrassom.groupby('ASSIGNED_BY_NAME').size().reset_index(name='Quantidade')
-        st.table(contagem_com_ultrassom)
-    else:
-        st.info("Nenhum cliente 'Com Ultrassom' encontrado para os filtros selecionados.")
-
-    # Tabela para S/ ULTRASSOM
-    st.markdown("**Sem Ultrassom**")
-    df_sem_ultrassom = df_filtrado[df_filtrado['ULTRASSOM_STATUS'] == 'S/ ULTRASSOM']
-    if not df_sem_ultrassom.empty:
-        contagem_sem_ultrassom = df_sem_ultrassom.groupby('ASSIGNED_BY_NAME').size().reset_index(name='Quantidade')
-        st.table(contagem_sem_ultrassom)
-    else:
-        st.info("Nenhum cliente 'Sem Ultrassom' encontrado para os filtros selecionados.") 
+    st.dataframe(df_filtrado[cols_to_display_existing].rename(columns=rename_map)) 
