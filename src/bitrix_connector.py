@@ -54,7 +54,7 @@ class BitrixConnector:
         try:
             return ApiCredentials(
                 base_url=st.secrets["bitrix24"]["base_url"],
-                token=st.secrets["bitrix24"]["token"],
+                token=st.secrets["bitrix24"].get("token", ""),
                 timeout=st.secrets["api"]["timeout"],
                 max_retries=st.secrets["api"]["max_retries"]
             )
@@ -264,100 +264,58 @@ class BitrixConnector:
 
     def get_users_data(self) -> pd.DataFrame:
         """Obtém dados de usuários do Bitrix24."""
-        # O endpoint para buscar usuários geralmente é 'user.get'
-        # A URL completa seria algo como: {base_url_do_webhook}/user.get.json
-        # Nota: A estrutura de webhook que você está usando com /?token={token}&table={table}
-        # pode não ser diretamente aplicável para user.get, que é um método REST padrão.
-        # Vamos assumir que seu base_url já inclui o /rest/USER_ID/WEBHOOK_TOKEN/ part.
-        # Se o seu webhook for genérico e não específico do método, esta abordagem pode precisar de ajuste.
+        # Retornando DataFrame vazio temporariamente para evitar erro de API com credenciais do PowerBI.
+        # A URL de webhook atual não suporta o método 'user.get'.
+        st.warning("A busca de dados de usuários está desabilitada temporariamente devido à configuração de credenciais.")
+        return pd.DataFrame()
 
-        # Tentativa 1: Usando um endpoint padrão de user.get se o webhook for um webhook de entrada geral
-        # Substitua '1' pelo ID do usuário que criou o webhook, se necessário, ou ajuste a URL.
-        # A URL do webhook para métodos específicos geralmente é construída de forma diferente.
-        # Este é um palpite comum para webhooks de entrada:
-        # {credenciais.base_url}user.get.json (se o token já estiver no base_url ou for adicionado de outra forma)
-        # ou {credenciais.base_url_sem_metodo_especifico}/user.get.json?auth={credenciais.token}
+        # O código abaixo fica comentado até que um webhook de API REST funcional seja configurado.
+        # url = f"{self._credentials.base_url}user.get.json"
+        # params = {
+        #     'FILTER[ACTIVE]': 'Y',
+        # }
 
-        # Para simplificar e ser consistente com sua estrutura get_deals_data,
-        # vamos tentar uma chamada GET para um endpoint 'user' se o seu 'base_url' for um endpoint de API genérico
-        # e o 'token' for um token de acesso.
-        # A API REST do Bitrix24 usualmente tem a forma: https://<your_domain>/rest/<user_id>/<token>/<method_name>
-        # Se o seu `_credentials.base_url` já for algo como https://<your_domain>/rest/ e o `_credentials.token` for <user_id>/<token>
-        # então a URL seria: f"{self._credentials.base_url}user.get.json?auth={self._credentials.token}"
-        # Ou, se o token já faz parte do base_url (como parece ser o caso do seu endpoint de tabela):
-        
-        # Vamos tentar uma estrutura mais comum para user.get com webhooks de entrada.
-        # O seu `base_url` parece ser `https://crm.construtoradias.com.br/rest/11467/t7jgz9kfyl7w4uh4/`
-        # E o token é `b24-connector` (conforme secrets). Isso é incomum.
-        # O token `t7jgz9kfyl7w4uh4` já está na URL base.
-        # O token `b24-connector` parece ser um identificador, não um token de autenticação para este endpoint.
+        # try:
+        #     response = self._session.get(
+        #         url,
+        #         params=params,
+        #         timeout=self._credentials.timeout
+        #     )
+        #     response.raise_for_status()
+        #     response_data = response.json()
 
-        # A URL CORRETA para o método user.get usando o webhook que já está no base_url é:
-        # {base_url}user.get.json
-        # Onde base_url já é: st.secrets["bitrix24"]["base_url"] que é https://crm.construtoradias.com.br/rest/11467/t7jgz9kfyl7w4uh4/
-        
-        url = f"{self._credentials.base_url}user.get.json"
-        # O campo 'FILTER[ACTIVE]' = 'Y' é para pegar apenas usuários ativos.
-        params = {
-            'FILTER[ACTIVE]': 'Y',
-            # 'ADMIN_MODE': True # Se precisar de acesso de administrador, mas geralmente não com webhooks normais
-        }
-
-        try:
-            response = self._session.get(
-                url,
-                params=params, # Parâmetros são passados via params para GET
-                timeout=self._credentials.timeout
-            )
-            response.raise_for_status()
-            response_data = response.json()
-
-            if 'result' in response_data and isinstance(response_data['result'], list):
-                users_list = response_data['result']
-                if not users_list:
-                    st.info("Nenhum usuário encontrado ou lista de usuários vazia.")
-                    return pd.DataFrame()
+        #     if 'result' in response_data and isinstance(response_data['result'], list):
+        #         users_list = response_data['result']
+        #         if not users_list:
+        #             st.info("Nenhum usuário encontrado ou lista de usuários vazia.")
+        #             return pd.DataFrame()
                 
-                # Campos que esperamos (mínimo ID, NAME, LAST_NAME)
-                # Verifique a documentação da API do Bitrix para todos os campos disponíveis para user.get
-                # Exemplo: ID, ACTIVE, EMAIL, NAME, LAST_NAME, SECOND_NAME, PERSONAL_GENDER, PERSONAL_PROFESSION, 
-                # PERSONAL_WWW, PERSONAL_BIRTHDAY, PERSONAL_PHOTO, PERSONAL_ICQ, PERSONAL_PHONE, PERSONAL_FAX, 
-                # PERSONAL_MOBILE, PERSONAL_PAGER, PERSONAL_STREET, PERSONAL_CITY, PERSONAL_STATE, PERSONAL_ZIP, 
-                # PERSONAL_COUNTRY, WORK_COMPANY, WORK_POSITION, UF_DEPARTMENT, UF_INTERESTS, UF_SKILLS, UF_WEB_SITES, 
-                # UF_XING, UF_LINKEDIN, UF_FACEBOOK, UF_TWITTER, UF_SKYPE, UF_DISTRICT, UF_PHONE_INNER
+        #         df = pd.DataFrame(users_list)
                 
-                # Vamos focar nos essenciais para o merge
-                df = pd.DataFrame(users_list)
+        #         required_cols = ['ID', 'NAME', 'LAST_NAME']
                 
-                # Selecionar e renomear colunas se necessário para consistência
-                # A API do Bitrix para user.get retorna 'ID', 'NAME', 'LAST_NAME' diretamente.
-                required_cols = ['ID', 'NAME', 'LAST_NAME']
-                
-                # Verificar se as colunas essenciais existem
-                for col in required_cols:
-                    if col not in df.columns:
-                        st.error(f"Coluna '{col}' não encontrada nos dados dos usuários da API. Verifique a resposta da API user.get.")
-                        return pd.DataFrame() # Retorna DF vazio para evitar mais erros
+        #         for col in required_cols:
+        #             if col not in df.columns:
+        #                 st.error(f"Coluna '{col}' não encontrada nos dados dos usuários da API.")
+        #                 return pd.DataFrame() 
 
-                # Garante que o ID seja string para o merge, pois em deals ASSIGNED_BY_ID é tratado como string.
-                df['ID'] = df['ID'].astype(str)
+        #         df['ID'] = df['ID'].astype(str)
                 
-                return df[required_cols] # Retorna apenas as colunas necessárias
+        #         return df[required_cols]
             
-            elif 'error' in response_data:
-                st.error(f"Erro da API Bitrix ao buscar usuários: {response_data.get('error_description', response_data['error'])}")
-                return pd.DataFrame()
-            else:
-                st.warning("Resposta da API de usuários não contém 'result' ou está em formato inesperado.")
-                # st.json(response_data) # Descomente para depurar a resposta
-                return pd.DataFrame()
+        #     elif 'error' in response_data:
+        #         st.error(f"Erro da API Bitrix ao buscar usuários: {response_data.get('error_description', response_data['error'])}")
+        #         return pd.DataFrame()
+        #     else:
+        #         st.warning("Resposta da API de usuários não contém 'result' ou está em formato inesperado.")
+        #         return pd.DataFrame()
 
-        except requests.exceptions.RequestException as e:
-            st.error(f"Falha na requisição ao buscar usuários: {e}")
-            return pd.DataFrame()
-        except Exception as e:
-            st.error(f"Erro inesperado ao processar dados dos usuários: {e}")
-            return pd.DataFrame()
+        # except requests.exceptions.RequestException as e:
+        #     st.error(f"Falha na requisição ao buscar usuários: {e}")
+        #     return pd.DataFrame()
+        # except Exception as e:
+        #     st.error(f"Erro inesperado ao processar dados dos usuários: {e}")
+        #     return pd.DataFrame()
 
 
 class BitrixDataCache:

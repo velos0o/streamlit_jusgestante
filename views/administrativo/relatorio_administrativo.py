@@ -149,68 +149,20 @@ def render_relatorio_administrativo():
             # O primeiro tab sempre estará ativo no carregamento da página ou F5.
             tab_funil_adm, tab_analise_resp_adm, tab_distribuicao_cli_adm = st.tabs(tab_titles_adm)
 
-            # Tenta manter o URL atualizado com o tab clicado.
-            # Esta é uma heurística devido às limitações do st.tabs.
-            # Inicializa o estado do display do sub-tab se não existir.
-            if 'current_administrativo_sub_page_display' not in st.session_state:
-                st.session_state.current_administrativo_sub_page_display = default_tab_display_name
-            
-            # Esta variável irá armazenar a chave de URL do tab que parece estar ativo.
-            # Será None para o tab padrão para limpar o sub_pagina da URL.
-            determined_active_tab_url_key = None
-
             with tab_funil_adm:
-                # Se este tab está ativo, atualize o estado e prepare a chave URL (None para default)
-                if st.session_state.current_administrativo_sub_page_display != tab_titles_adm[0]:
-                    # Esta condição significa que um *outro* tab estava no estado, e agora este está sendo renderizado.
-                    # Isso sugere que o usuário pode ter clicado neste tab.
-                    st.session_state.current_administrativo_sub_page_display = tab_titles_adm[0]
-                    determined_active_tab_url_key = None # Default tab, no sub_pagina
-                elif st.query_params.get("sub_pagina") is not None:
-                     # Se este é o tab padrão, mas há um sub_pagina na URL, significa que precisamos limpar a URL
-                     determined_active_tab_url_key = None 
-                
                 if df_administrativo_filtrado.empty:
                     st.warning("Não há dados para exibir o funil administrativo com os filtros selecionados.")
                 else:
                     render_funil_administrativo(df_administrativo_filtrado, ETAPAS_ADMINISTRATIVO_ORDEM)
             
             with tab_analise_resp_adm:
-                # Se este tab está ativo, atualize o estado e prepare a chave URL
-                if st.session_state.current_administrativo_sub_page_display != tab_titles_adm[1]:
-                    st.session_state.current_administrativo_sub_page_display = tab_titles_adm[1]
-                    determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[1])
-                elif st.query_params.get("sub_pagina") != SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[1]):
-                    # Se este tab está no estado, mas a URL não corresponde, atualize a URL
-                    if st.session_state.current_administrativo_sub_page_display == tab_titles_adm[1]:
-                         determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[1])
-
                 if df_administrativo_filtrado.empty:
                     st.warning("Não há dados para exibir a análise por responsável com os filtros selecionados.")
                 else:
                     render_analise_responsaveis_administrativo(df_administrativo_filtrado, ETAPAS_ADMINISTRATIVO_ORDEM)
 
             with tab_distribuicao_cli_adm:
-                # Lógica de estado para o novo tab
-                if st.session_state.current_administrativo_sub_page_display != tab_titles_adm[2]:
-                    st.session_state.current_administrativo_sub_page_display = tab_titles_adm[2]
-                    determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2])
-                elif st.query_params.get("sub_pagina") != SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2]):
-                    if st.session_state.current_administrativo_sub_page_display == tab_titles_adm[2]:
-                        determined_active_tab_url_key = SUB_PAGE_STATE_TO_URL_MAP_ADM.get(tab_titles_adm[2])
-
                 render_distribuicao_clientes_administrativo(df_distribuicao)
-
-            # Atualiza o URL fora dos blocos 'with' para evitar múltiplos reruns
-            current_url_sub_page = st.query_params.get("sub_pagina")
-
-            if determined_active_tab_url_key:
-                if current_url_sub_page != determined_active_tab_url_key:
-                    st.query_params.sub_pagina = determined_active_tab_url_key
-                    st.rerun()
-            elif current_url_sub_page is not None: # Should be None for default tab
-                del st.query_params["sub_pagina"]
-                st.rerun()
 
         except Exception as e:
             st.error(f"Erro ao carregar dados administrativos: {str(e)}")

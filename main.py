@@ -144,7 +144,7 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("🏢 Relatório Comercial")
                 if new_url_param:
-                    st.query_params.pagina = new_url_param
+                    st.experimental_set_query_params(pagina=new_url_param)
                 st.rerun()
             
         # Novo Botão para Trâmites Administrativos
@@ -153,7 +153,7 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("📋 Trâmites Administrativos")
                 if new_url_param:
-                    st.query_params.pagina = new_url_param
+                    st.experimental_set_query_params(pagina=new_url_param)
                 st.rerun()
 
         # Novo Botão para Relatório de Audiência
@@ -162,7 +162,7 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("⚖️ Relatório de Audiência")
                 if new_url_param:
-                    st.query_params.pagina = new_url_param
+                    st.experimental_set_query_params(pagina=new_url_param)
                 st.rerun()
 
         # O estado da página é gerenciado via st.session_state
@@ -173,7 +173,7 @@ def main():
     load_styles()
     
     # --- Lógica de Roteamento ---
-    url_page_param = st.query_params.get("pagina")
+    url_page_param = st.experimental_get_query_params().get("pagina", [None])[0]
 
     # Prioridade 1: URL param para definir o estado, se válido e diferente do estado atual, ou se estado não existe.
     if url_page_param and url_page_param in PAGE_URL_MAP:
@@ -191,7 +191,7 @@ def main():
     expected_url_param_for_state = PAGE_STATE_TO_URL_MAP.get(current_page_in_state)
 
     if expected_url_param_for_state and url_page_param != expected_url_param_for_state:
-        st.query_params.pagina = expected_url_param_for_state
+        st.experimental_set_query_params(pagina=expected_url_param_for_state)
         # Se set_query_params não causar um rerun que atualize get_query_params para o próximo ciclo,
         # e isso for um problema, um st.rerun() PODE ser necessário aqui, mas use com cautela.
         # Para a maioria dos casos, Streamlit lida bem com a atualização da URL e o estado interno.
