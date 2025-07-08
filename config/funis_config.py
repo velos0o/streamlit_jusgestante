@@ -36,6 +36,7 @@ class FunilConfig:
     AUDIENCIA_ID = 4
     RECEBIMENTO_ID = 6
     DESPESAS_ID = 8
+    ENTREVISTA_ID = 11
     
     @classmethod
     def get_comercial_config(cls) -> Category:
@@ -111,22 +112,47 @@ class FunilConfig:
             description="Funil de audiências e procedimentos judiciais",
             stages=stages
         )
-    
+        
+    @classmethod
+    def get_entrevista_config(cls) -> Category:
+        """Retorna configuração do funil de entrevista"""
+        stages = [
+            Stage(313, "C11:NEW", "ENTREVISTA PENDENTE", 10, None, "Neutro"),
+            Stage(329, "C11:UC_RA8DBB", "ENTREVISTA AGENDADA", 20, None, "Neutro"),
+            Stage(331, "C11:UC_7TNBPV", "ENTREVISTA REALIZADA", 30, None, "Neutro"),
+            Stage(335, "C11:UC_JKFZFO", "PEND. ASSINATURA", 40, None, "Neutro"),
+            Stage(333, "C11:UC_8LT60K", "PEND. DOC", 50, None, "Neutro"),
+            Stage(323, "C11:WON", "VALIDADO", 60, "S", "Sucesso"),
+            Stage(325, "C11:LOSE", "APENAS AUXILO", 70, "F", "Falha"),
+            Stage(339, "C11:UC_ASF49M", "RECUSADO", 80, "F", "Falha"),
+            Stage(341, "C11:UC_VDDDMG", "DESQUALIFICADO", 90, "F", "Falha"),
+        ]
+        
+        return Category(
+            category_id=cls.ENTREVISTA_ID,
+            category_name="ENTREVISTA",
+            total_stages=9,
+            description="Funil de entrevista de validação",
+            stages=stages
+        )
+
     @classmethod
     def get_all_categories(cls) -> Dict[str, Category]:
         """Retorna todas as categorias disponíveis"""
         return {
             "COMERCIAL": cls.get_comercial_config(),
             "TRAMITES": cls.get_tramites_config(),
-            "AUDIENCIA": cls.get_audiencia_config()
+            "AUDIENCIA": cls.get_audiencia_config(),
+            "ENTREVISTA": cls.get_entrevista_config()
         }
-    
+
     @classmethod
     def get_category_by_id(cls, category_id: int) -> Optional[Category]:
         """Retorna categoria por ID"""
         category_map = {
             cls.COMERCIAL_ID: cls.get_comercial_config(),
             cls.TRAMITES_ID: cls.get_tramites_config(),
-            cls.AUDIENCIA_ID: cls.get_audiencia_config()
+            cls.AUDIENCIA_ID: cls.get_audiencia_config(),
+            cls.ENTREVISTA_ID: cls.get_entrevista_config()
         }
         return category_map.get(category_id) 

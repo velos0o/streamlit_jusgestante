@@ -54,7 +54,7 @@ class BitrixConnector:
         try:
             return ApiCredentials(
                 base_url=st.secrets["bitrix24"]["base_url"],
-                token=st.secrets["bitrix24"].get("token", ""),
+                token=st.secrets["bitrix24"]["token"],
                 timeout=st.secrets["api"]["timeout"],
                 max_retries=st.secrets["api"]["max_retries"]
             )
@@ -66,17 +66,49 @@ class BitrixConnector:
         session = requests.Session()
         session.headers.update({
             'Accept': 'application/json',
+            'Content-Type': 'application/json',
             'User-Agent': 'Streamlit-JusGestante/1.0'
         })
         return session
-    
-    def _build_query_payload(self, table: str, date_range: Optional[DateRange] = None,
-                           filters: Optional[List[QueryFilter]] = None,
-                           fields: Optional[List[str]] = None) -> Dict:
-        """Constrói payload da consulta"""
+
+    def _execute_bi_query(self, table_name: str, payload: Dict) -> pd.DataFrame:
+        """Executa uma consulta genérica no BI Connector e retorna um DataFrame."""
+        url = f"{self._credentials.base_url}?token={self._credentials.token}&table={table_name}"
+        
+        for attempt in range(self._credentials.max_retries):
+            try:
+                response = self._session.post(url, json=payload, timeout=self._credentials.timeout)
+                response.raise_for_status()
+                response_data = response.json()
+
+                if isinstance(response_data, list) and len(response_data) > 1:
+                    column_names = response_data[0]
+                    data_rows = response_data[1:]
+                    return pd.DataFrame(data_rows, columns=column_names)
+                elif isinstance(response_data, list) and len(response_data) <= 1:
+                    return pd.DataFrame()
+                else:
+                    st.warning(f"Resposta inesperada da API para a tabela {table_name}: {response_data}")
+                    return pd.DataFrame()
+
+            except requests.exceptions.RequestException as e:
+                if attempt == self._credentials.max_retries - 1:
+                    raise BitrixApiError(f"Falha na requisição para a tabela {table_name} após {self._credentials.max_retries} tentativas: {e}")
+                continue
+        
+        return pd.DataFrame()
+
+    def get_deals_data(self, category_ids: Optional[List[int]] = None,
+                      date_range: Optional[DateRange] = None) -> pd.DataFrame:
+        """Obtém dados de negócios (deals), aplicando filtros via API."""
         payload = {}
+        filters = []
+
+        if category_ids:
+            filters.append({"fieldName": "CATEGORY_ID", "values": category_ids, "type": "INCLUDE", "operator": "EQUALS"})
         
         if date_range:
+            # O BI Connector usa um formato diferente para dateRange
             payload["dateRange"] = {
                 "startDate": date_range.start_date,
                 "endDate": date_range.end_date
@@ -85,237 +117,54 @@ class BitrixConnector:
                 "timeFilterColumn": "DATE_CREATE"
             }
         
-        if fields:
-            payload["fields"] = [{"name": field} for field in fields]
-        
         if filters:
-            payload["dimensionsFilters"] = self._build_dimensions_filters(filters)
-        
-        return payload
-    
-    def _build_dimensions_filters(self, filters: List[QueryFilter]) -> List[List[Dict]]:
-        """Constrói filtros dimensionais"""
-        return [[{
-            "fieldName": filter_obj.field_name,
-            "values": filter_obj.values,
-            "type": filter_obj.filter_type,
-            "operator": filter_obj.operator
-        } for filter_obj in filters]]
-    
-    def _execute_request(self, table: str, payload: Dict) -> Dict:
-        """Executa requisição à API"""
-        url = f"{self._credentials.base_url}?token={self._credentials.token}&table={table}"
-        
-        for attempt in range(self._credentials.max_retries):
-            try:
-                response = self._session.post(
-                    url,
-                    json=payload,
-                    timeout=self._credentials.timeout
-                )
-                response.raise_for_status()
-                return response.json()
+            payload["dimensionsFilters"] = [filters]
             
-            except requests.exceptions.RequestException as e:
-                if attempt == self._credentials.max_retries - 1:
-                    raise BitrixApiError(f"Falha na requisição após {self._credentials.max_retries} tentativas: {e}")
-                continue
-    
-    def get_deals_data(self, category_ids: Optional[List[int]] = None,
-                      date_range: Optional[DateRange] = None,
-                      fields: Optional[List[str]] = None) -> pd.DataFrame:
-        """Obtém dados de negócios (deals) do Bitrix24"""
-        
-        # Para esta API, usamos requisição GET simples (payload vazio funciona melhor)
-        url = f"{self._credentials.base_url}?token={self._credentials.token}&table=crm_deal"
-        
-        try:
-            response = self._session.get(url, timeout=self._credentials.timeout)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            df = self._convert_to_dataframe(response_data, fields or [])
-            
-            # Aplica filtros após carregar os dados
-            if not df.empty:
-                df = self._apply_filters(df, category_ids, date_range)
-            
-            return df
-        
-        except Exception as e:
-            st.error(f"Erro ao obter dados de deals: {e}")
-            return pd.DataFrame()
-    
-    def _apply_filters(self, df: pd.DataFrame, category_ids: Optional[List[int]] = None,
-                      date_range: Optional[DateRange] = None) -> pd.DataFrame:
-        """Aplica filtros nos dados carregados"""
-        if df.empty:
-            return df
-        
-        # Cria cópia para evitar warnings do pandas
-        df = df.copy()
-        
-        # Filtro por categoria
-        if category_ids and 'CATEGORY_ID' in df.columns:
-            df = df[df['CATEGORY_ID'].isin(category_ids)]
-        
-        # Filtro por data
-        if date_range and 'DATE_CREATE' in df.columns:
-            df.loc[:, 'DATE_CREATE'] = pd.to_datetime(df['DATE_CREATE'], errors='coerce')
-            start_date = pd.to_datetime(date_range.start_date)
-            end_date = pd.to_datetime(date_range.end_date)
-            df = df[(df['DATE_CREATE'] >= start_date) & (df['DATE_CREATE'] <= end_date)]
-        
-        return df
-    
+        return self._execute_bi_query("crm_deal", payload)
+
     def get_deals_uf_data(self, date_range: Optional[DateRange] = None) -> pd.DataFrame:
-        """Obtém dados de UF dos negócios"""
-        url = f"{self._credentials.base_url}?token={self._credentials.token}&table=crm_deal_uf"
+        """Obtém dados de UF dos negócios, com filtro de data opcional."""
+        payload = {}
+        if date_range:
+            payload["dateRange"] = {
+                "startDate": date_range.start_date,
+                "endDate": date_range.end_date
+            }
+            # Assumindo que a tabela UF também pode ser filtrada por uma data,
+            # mas o BI connector não documenta qual campo de data usar para crm_deal_uf.
+            # Se isso falhar, o filtro de data terá de ser local para esta tabela.
+            # payload["configParams"] = {"timeFilterColumn": "DATE_CREATE"} # Campo incerto
         
-        try:
-            response = self._session.get(url, timeout=self._credentials.timeout)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            df = self._convert_to_dataframe(response_data, [])
-            
-            # Aplica filtro de data se necessário
-            if not df.empty and date_range:
-                df = self._apply_filters(df, None, date_range)
-            
-            return df
-        
-        except Exception as e:
-            st.error(f"Erro ao obter dados de UF: {e}")
-            return pd.DataFrame()
-    
+        return self._execute_bi_query("crm_deal_uf", payload)
+
+    def get_users_data(self) -> pd.DataFrame:
+        """Obtém dados dos usuários do Bitrix24."""
+        return self._execute_bi_query("user", {})
+
     def _convert_to_dataframe(self, response_data, fields: List[str]) -> pd.DataFrame:
-        """Converte resposta da API em DataFrame"""
-        try:
-            # A API retorna uma lista diretamente (não um objeto com chave 'data')
-            if isinstance(response_data, list) and response_data:
-                # Primeiro elemento é o cabeçalho com nomes das colunas
-                column_names = response_data[0]
-                data_rows = response_data[1:]  # Demais elementos são os dados
-                
-                if not data_rows:
-                    return pd.DataFrame()
-                
-                # Cria DataFrame com os nomes das colunas do cabeçalho
-                df = pd.DataFrame(data_rows, columns=column_names)
-                
-                return self._clean_dataframe(df)
-            
-            # Fallback: se for objeto com chave 'data' (formato antigo)
-            elif isinstance(response_data, dict) and 'data' in response_data:
-                data_arrays = response_data['data']
-                
-                if not data_arrays:
-                    return pd.DataFrame()
-                
-                df = pd.DataFrame(data_arrays, columns=fields[:len(data_arrays[0])])
-                return self._clean_dataframe(df)
-            
-            else:
-                st.warning("Formato de resposta da API não reconhecido")
-                return pd.DataFrame()
-        
-        except Exception as e:
-            st.error(f"Erro ao converter dados para DataFrame: {e}")
-            return pd.DataFrame()
-    
-    def _get_column_mapping(self, num_columns: int) -> List[str]:
-        """Retorna mapeamento de colunas baseado no número de colunas"""
-        # Mapeamento padrão baseado na estrutura da API Bitrix24
-        base_columns = [
-            'ID', 'TITLE', 'CATEGORY_ID', 'STAGE_SEMANTICS', 'OPPORTUNITY',
-            'CURRENCY_ID', 'DATE_CREATE', 'DATE_MODIFY', 'STAGE_ID', 
-            'ASSIGNED_BY_ID', 'CREATED_BY_ID', 'MOVED_BY_ID', 'MOVED_TIME',
-            'COMPANY_ID', 'CONTACT_ID', 'IS_RETURN_CUSTOMER', 'PROBABILITY',
-            'BEGINDATE', 'CLOSEDATE', 'OPENED', 'CLOSED', 'TYPE_ID',
-            'LEAD_ID', 'IS_NEW', 'IS_RECURRING', 'IS_WON', 'IS_LOST'
-        ]
-        
-        # Retorna apenas as colunas necessárias baseado no número disponível
-        if num_columns <= len(base_columns):
-            return base_columns[:num_columns]
-        else:
-            # Se há mais colunas que o esperado, adiciona genéricas
-            extra_cols = [f'COLUMN_{i}' for i in range(len(base_columns), num_columns)]
-            return base_columns + extra_cols
-    
+        """Converte resposta da API em DataFrame (obsoleto com _fetch_all_pages, mas mantido por segurança)"""
+        if isinstance(response_data, list):
+            return pd.DataFrame(response_data)
+        return pd.DataFrame()
+
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Limpa e formata o DataFrame"""
         if df.empty:
             return df
-        
-        # Converte colunas de data
-        date_columns = [col for col in df.columns if 'DATE' in col.upper()]
-        for col in date_columns:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-        
+
         # Converte colunas numéricas
-        numeric_columns = ['OPPORTUNITY', 'CURRENCY_ID', 'CATEGORY_ID']
-        for col in numeric_columns:
+        numeric_cols = ['ID', 'CATEGORY_ID', 'ASSIGNED_BY_ID', 'CREATED_BY_ID', 'COMPANY_ID', 'CONTACT_ID', 'LEAD_ID']
+        for col in numeric_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+        # Converte colunas de data
+        date_cols = ['DATE_CREATE', 'DATE_MODIFY', 'BEGINDATE', 'CLOSEDATE']
+        for col in date_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
         
         return df
-
-    def get_users_data(self) -> pd.DataFrame:
-        """Obtém dados de usuários do Bitrix24."""
-        # Retornando DataFrame vazio temporariamente para evitar erro de API com credenciais do PowerBI.
-        # A URL de webhook atual não suporta o método 'user.get'.
-        st.warning("A busca de dados de usuários está desabilitada temporariamente devido à configuração de credenciais.")
-        return pd.DataFrame()
-
-        # O código abaixo fica comentado até que um webhook de API REST funcional seja configurado.
-        # url = f"{self._credentials.base_url}user.get.json"
-        # params = {
-        #     'FILTER[ACTIVE]': 'Y',
-        # }
-
-        # try:
-        #     response = self._session.get(
-        #         url,
-        #         params=params,
-        #         timeout=self._credentials.timeout
-        #     )
-        #     response.raise_for_status()
-        #     response_data = response.json()
-
-        #     if 'result' in response_data and isinstance(response_data['result'], list):
-        #         users_list = response_data['result']
-        #         if not users_list:
-        #             st.info("Nenhum usuário encontrado ou lista de usuários vazia.")
-        #             return pd.DataFrame()
-                
-        #         df = pd.DataFrame(users_list)
-                
-        #         required_cols = ['ID', 'NAME', 'LAST_NAME']
-                
-        #         for col in required_cols:
-        #             if col not in df.columns:
-        #                 st.error(f"Coluna '{col}' não encontrada nos dados dos usuários da API.")
-        #                 return pd.DataFrame() 
-
-        #         df['ID'] = df['ID'].astype(str)
-                
-        #         return df[required_cols]
-            
-        #     elif 'error' in response_data:
-        #         st.error(f"Erro da API Bitrix ao buscar usuários: {response_data.get('error_description', response_data['error'])}")
-        #         return pd.DataFrame()
-        #     else:
-        #         st.warning("Resposta da API de usuários não contém 'result' ou está em formato inesperado.")
-        #         return pd.DataFrame()
-
-        # except requests.exceptions.RequestException as e:
-        #     st.error(f"Falha na requisição ao buscar usuários: {e}")
-        #     return pd.DataFrame()
-        # except Exception as e:
-        #     st.error(f"Erro inesperado ao processar dados dos usuários: {e}")
-        #     return pd.DataFrame()
 
 
 class BitrixDataCache:

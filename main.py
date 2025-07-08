@@ -14,6 +14,8 @@ PAGE_URL_MAP = {
     "comercial": "🏢 Relatório Comercial",
     "administrativo": "📋 Trâmites Administrativos",
     "audiencia": "⚖️ Relatório de Audiência",
+    "financeiro": "💰 Relatório Financeiro",
+    "entrevista": "🎙️ Relatório de Entrevista",
 }
 PAGE_STATE_TO_URL_MAP = {v: k for k, v in PAGE_URL_MAP.items()}
 # --- Fim Configuração de Roteamento ---
@@ -144,7 +146,7 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("🏢 Relatório Comercial")
                 if new_url_param:
-                    st.experimental_set_query_params(pagina=new_url_param)
+                    st.query_params.pagina = new_url_param
                 st.rerun()
             
         # Novo Botão para Trâmites Administrativos
@@ -153,7 +155,7 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("📋 Trâmites Administrativos")
                 if new_url_param:
-                    st.experimental_set_query_params(pagina=new_url_param)
+                    st.query_params.pagina = new_url_param
                 st.rerun()
 
         # Novo Botão para Relatório de Audiência
@@ -162,7 +164,25 @@ def render_sidebar_navigation():
                 st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
                 new_url_param = PAGE_STATE_TO_URL_MAP.get("⚖️ Relatório de Audiência")
                 if new_url_param:
-                    st.experimental_set_query_params(pagina=new_url_param)
+                    st.query_params.pagina = new_url_param
+                st.rerun()
+
+        # Botão para Relatório de Entrevista
+        if st.button("🎙️ Relatório de Entrevista", key="relatorio_entrevista_btn", use_container_width=True):
+            if st.session_state.get('pagina_selecionada') != "🎙️ Relatório de Entrevista":
+                st.session_state.pagina_selecionada = "🎙️ Relatório de Entrevista"
+                new_url_param = PAGE_STATE_TO_URL_MAP.get("🎙️ Relatório de Entrevista")
+                if new_url_param:
+                    st.query_params.pagina = new_url_param
+                st.rerun()
+
+        # Botão para Relatório Financeiro
+        if st.button("💰 Relatório Financeiro", key="relatorio_financeiro_btn", use_container_width=True):
+            if st.session_state.get('pagina_selecionada') != "💰 Relatório Financeiro":
+                st.session_state.pagina_selecionada = "💰 Relatório Financeiro"
+                new_url_param = PAGE_STATE_TO_URL_MAP.get("💰 Relatório Financeiro")
+                if new_url_param:
+                    st.query_params.pagina = new_url_param
                 st.rerun()
 
         # O estado da página é gerenciado via st.session_state
@@ -173,7 +193,7 @@ def main():
     load_styles()
     
     # --- Lógica de Roteamento ---
-    url_page_param = st.experimental_get_query_params().get("pagina", [None])[0]
+    url_page_param = st.query_params.get("pagina", None)
 
     # Prioridade 1: URL param para definir o estado, se válido e diferente do estado atual, ou se estado não existe.
     if url_page_param and url_page_param in PAGE_URL_MAP:
@@ -191,7 +211,7 @@ def main():
     expected_url_param_for_state = PAGE_STATE_TO_URL_MAP.get(current_page_in_state)
 
     if expected_url_param_for_state and url_page_param != expected_url_param_for_state:
-        st.experimental_set_query_params(pagina=expected_url_param_for_state)
+        st.query_params.pagina = expected_url_param_for_state
         # Se set_query_params não causar um rerun que atualize get_query_params para o próximo ciclo,
         # e isso for um problema, um st.rerun() PODE ser necessário aqui, mas use com cautela.
         # Para a maioria dos casos, Streamlit lida bem com a atualização da URL e o estado interno.
@@ -229,6 +249,22 @@ def main():
             st.error(f"❌ Erro ao carregar relatório de audiência: {str(e)}")
             st.info("Verifique se o módulo de audiência está configurado.")
             st.warning("🚧 O relatório de Audiência está em desenvolvimento.")
+
+    elif pagina_atual == "🎙️ Relatório de Entrevista":
+        try:
+            from views.entrevista.relatorio_entrevista import render_relatorio_entrevista
+            render_relatorio_entrevista()
+        except ImportError as e:
+            st.error(f"❌ Erro ao carregar relatório de entrevista: {str(e)}")
+            st.info("Verifique se o módulo de entrevista está configurado.")
+
+    elif pagina_atual == "💰 Relatório Financeiro":
+        try:
+            from views.financeiro.relatorio_financeiro import render_relatorio_financeiro
+            render_relatorio_financeiro()
+        except ImportError as e:
+            st.error(f"❌ Erro ao carregar relatório financeiro: {str(e)}")
+            st.info("Verifique se o módulo financeiro está configurado.")
 
 
 if __name__ == "__main__":

@@ -181,7 +181,16 @@ class DataService:
             start_date=start_date,
             end_date=end_date
         )
-    
+
+    def get_entrevista_data(self, start_date: Optional[date] = None,
+                           end_date: Optional[date] = None) -> pd.DataFrame:
+        """Obtém dados específicos do funil de entrevista"""
+        return self.get_deals_by_category(
+            category_ids=[FunilConfig.ENTREVISTA_ID],
+            start_date=start_date,
+            end_date=end_date
+        )
+
     def get_all_funis_data(self, start_date: Optional[date] = None,
                           end_date: Optional[date] = None) -> pd.DataFrame:
         """Obtém dados de todos os funis principais"""
@@ -230,6 +239,10 @@ class DataService:
             # Converte a coluna UF_CRM_DATA_FECHAMENTO1 para datetime após a mesclagem
             if 'UF_CRM_DATA_FECHAMENTO1' in df.columns:
                 df['UF_CRM_DATA_FECHAMENTO1'] = pd.to_datetime(df['UF_CRM_DATA_FECHAMENTO1'], errors='coerce').dt.date
+
+            # Converte a coluna UF_CRM_VALIDADO_DATA para datetime
+            if 'UF_CRM_VALIDADO_DATA' in df.columns:
+                df['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df['UF_CRM_VALIDADO_DATA'], errors='coerce').dt.date
 
             # Converter a coluna de Data de Audiência (UF_CRM_1731693426655)
             DATA_AUDIENCIA_FIELD = 'UF_CRM_1731693426655'
