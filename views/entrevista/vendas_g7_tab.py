@@ -28,9 +28,14 @@ def render_vendas_g7_tab():
         vendas_por_responsavel = deals_df.groupby('ASSIGNED_BY').size().reset_index(name='Vendas')
         vendas_por_responsavel.rename(columns={'ASSIGNED_BY': 'Responsável'}, inplace=True)
 
-        total_row = pd.DataFrame({'Responsável': ['Total'], 'Vendas': [vendas_por_responsavel['Vendas'].sum()]})
+        # Ordena os responsáveis por número de vendas
+        vendas_por_responsavel.sort_values(by='Vendas', ascending=False, inplace=True)
+
+        # Adiciona a linha de total ao final
+        total_vendas = vendas_por_responsavel['Vendas'].sum()
+        total_row = pd.DataFrame([{'Responsável': 'Total', 'Vendas': total_vendas}])
+        
         resultado_df = pd.concat([vendas_por_responsavel, total_row], ignore_index=True)
-        resultado_df.sort_values(by='Vendas', ascending=False, inplace=True)
         
         st.dataframe(resultado_df, use_container_width=True, hide_index=True)
 

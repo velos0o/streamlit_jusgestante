@@ -23,10 +23,9 @@ def render_relatorio_entrevista():
     st.title("Relatório de Entrevista")
     data_service = DataService()
 
-    # --- Filtros na Sidebar ---
-    with st.sidebar:
-        st.markdown("🔍 Filtros (Análise de Desempenho)")
-        st.markdown("📅 Data de Criação:")
+    # --- Filtros ---
+    with st.expander("🔍 Filtros (Análise de Desempenho)", expanded=True):
+        st.markdown("📅 **Data de Criação:**")
         col1, col2 = st.columns(2)
         with col1:
             data_criacao_inicio = st.date_input("Início", value=date.today() - timedelta(days=90), key="entrevista_data_criacao_inicio")
