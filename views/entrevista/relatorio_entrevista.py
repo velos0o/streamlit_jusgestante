@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import sys
 import os
 import pandas as pd
+from datetime import datetime
 
 # Adiciona src e config ao path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
@@ -15,7 +16,127 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
 
 from src.data_service import DataService
 from views.entrevista.analise_responsaveis_entrevista import render_analise_responsaveis_entrevista
-from views.entrevista.vendas_g7_tab import render_vendas_g7_tab
+from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data
+
+def _render_persistent_alert_popup(count: int):
+    """Renderiza um pop-up de alerta fixo e animado, saindo da borda da tela."""
+    
+    alert_html = f"""
+    <style>
+        @keyframes pulse-red-strong {{
+            0% {{ box-shadow: -5px 5px 15px -3px rgba(0,0,0,0.3); }}
+            70% {{ box-shadow: -5px 5px 30px 5px rgba(255, 82, 82, 0.9); }} /* Brilho vermelho mais forte */
+            100% {{ box-shadow: -5px 5px 15px -3px rgba(0,0,0,0.3); }}
+        }}
+        .edge-alert {{
+            position: fixed;
+            top: 100px;
+            right: 0; /* Colado na borda direita */
+            padding: 1rem 1.5rem 1rem 2rem; /* Mais padding à esquerda */
+            border-top-left-radius: 0.5rem;
+            border-bottom-left-radius: 0.5rem;
+            border-top-right-radius: 0; /* Canto reto na borda */
+            border-bottom-right-radius: 0; /* Canto reto na borda */
+            background-color: #ff5252; /* Fundo vermelho */
+            color: white;
+            font-weight: normal; /* Texto "Vendas Paradas" com peso normal */
+            text-align: center;
+            box-shadow: -5px 5px 15px -3px rgba(0,0,0,0.3);
+            animation: pulse-red-strong 2s infinite;
+            z-index: 9999;
+        }}
+        .edge-alert .count {{
+            color: white; /* Número branco */
+            font-size: 2.5rem;
+            font-weight: 900; /* Número em negrito forte */
+            display: block;
+            line-height: 1;
+        }}
+    </style>
+    <div class="edge-alert">
+        <span class="count">{count}</span>
+        Vendas Paradas
+    </div>
+    """
+    st.markdown(alert_html, unsafe_allow_html=True)
+
+def _format_time_delta(delta):
+    """Formata o tempo parado em horas ou dias."""
+    hours = delta.total_seconds() / 3600
+    if hours < 24:
+        return f"{int(hours)} horas"
+    else:
+        days = delta.days
+        return f"{days} dias"
+
+def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
+    """Verifica e exibe um alerta se houver vendas na G7 não sincronizadas no funil de entrevista."""
+    st.subheader("Sincronização de Vendas (G7 vs. JusGestante)")
+
+    try:
+        df_g7 = get_cached_g7_data()
+
+        if df_g7.empty:
+            st.info("Nenhum dado de vendas encontrado na G7 para verificação.")
+            return
+            
+        if 'UF_CRM_ID_G7' not in df_entrevista.columns:
+            st.warning("Coluna 'UF_CRM_ID_G7' não encontrada nos dados da entrevista. Não é possível verificar a sincronização.")
+            return
+
+        # Garante que os IDs são strings para comparação
+        ids_g7 = set(df_g7['ID'].astype(str))
+        ids_jusgestante_link = set(df_entrevista['UF_CRM_ID_G7'].dropna().astype(str))
+
+        g7_ids_not_in_jusgestante = ids_g7 - ids_jusgestante_link
+
+        if not g7_ids_not_in_jusgestante:
+            st.success("✅ Todas as vendas da G7 estão sincronizadas corretamente.")
+        else:
+            total_divergencias = len(g7_ids_not_in_jusgestante)
+            divergencias_df = df_g7[df_g7['ID'].astype(str).isin(g7_ids_not_in_jusgestante)].copy()
+
+            # Calcula o tempo parado (horas/dias)
+            oldest_time_str = "N/A"
+            if 'UF_CRM_DATA_FECHAMENTO1' in divergencias_df.columns:
+                divergencias_df['FECHAMENTO_DT'] = pd.to_datetime(divergencias_df['UF_CRM_DATA_FECHAMENTO1'], errors='coerce')
+                
+                # Calcula o tempo parado para cada linha
+                now = datetime.now()
+                divergencias_df['TEMPO_PARADO_DELTA'] = divergencias_df['FECHAMENTO_DT'].apply(lambda x: now - x if pd.notna(x) else pd.Timedelta(seconds=0))
+                divergencias_df['TEMPO_PARADO'] = divergencias_df['TEMPO_PARADO_DELTA'].apply(_format_time_delta)
+
+                # Encontra a divergência mais antiga para o alerta
+                data_mais_antiga = divergencias_df['FECHAMENTO_DT'].min()
+                if pd.notna(data_mais_antiga):
+                    oldest_time_str = _format_time_delta(now - data_mais_antiga)
+            else:
+                divergencias_df['TEMPO_PARADO'] = "N/A"
+
+            # Exibe o pop-up de alerta fixo
+            _render_persistent_alert_popup(total_divergencias)
+            
+            # Mensagens dinâmicas
+            texto_tempo = f"e estão sem atendimento há até {oldest_time_str}." if oldest_time_str != "N/A" else "e precisam ser sincronizadas."
+            titulo_alerta = f"⚠️ Alerta: {total_divergencias} Vendas da G7 não foram enviadas para o Funil de Entrevista {texto_tempo}"
+            texto_ajuda = "A lista abaixo mostra os negócios da G7 que precisam ser criados no funil de Entrevista. A coluna 'Tempo Parado' indica há quanto tempo a venda foi fechada."
+
+            with st.expander(titulo_alerta, expanded=True):
+                st.markdown(texto_ajuda)
+                
+                # Prepara o DataFrame para exibição
+                colunas_para_exibir = ['ID', 'TITLE', 'TEMPO_PARADO']
+                rename_map = {'ID': 'ID do Card (G7)', 'TITLE': 'Nome do Negócio', 'TEMPO_PARADO': 'Tempo Parado'}
+
+                st.dataframe(
+                    divergencias_df[colunas_para_exibir].rename(columns=rename_map),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao verificar a sincronização: {e}")
+
 
 def render_relatorio_entrevista():
     """Renderiza um relatório consolidado com a análise de desempenho, as vendas da G7 e a análise de validação."""
@@ -50,7 +171,12 @@ def render_relatorio_entrevista():
         st.warning("Nenhum dado encontrado para o período selecionado.")
         st.stop()
 
+    # --- Seção de Alerta de Sincronização ---
+    _render_sincronizacao_alerta(df_entrevista)
+
     # --- Seção de Análise de Desempenho (JusGestante) ---
+    st.markdown("---")
+    st.subheader("Análise de Desempenho (Funil de Entrevista)")
     _render_analise_desempenho(df_entrevista)
 
     # --- Divisor e Seção de Vendas (G7) ---

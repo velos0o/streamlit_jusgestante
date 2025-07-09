@@ -135,7 +135,7 @@ class FunilConfig:
             description="Funil de entrevista de validação",
             stages=stages
         )
-
+    
     @classmethod
     def get_all_categories(cls) -> Dict[str, Category]:
         """Retorna todas as categorias disponíveis"""
@@ -145,7 +145,7 @@ class FunilConfig:
             "AUDIENCIA": cls.get_audiencia_config(),
             "ENTREVISTA": cls.get_entrevista_config()
         }
-
+    
     @classmethod
     def get_category_by_id(cls, category_id: int) -> Optional[Category]:
         """Retorna categoria por ID"""

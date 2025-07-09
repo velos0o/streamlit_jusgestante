@@ -181,7 +181,7 @@ class DataService:
             start_date=start_date,
             end_date=end_date
         )
-
+    
     def get_entrevista_data(self, start_date: Optional[date] = None,
                            end_date: Optional[date] = None) -> pd.DataFrame:
         """Obtém dados específicos do funil de entrevista"""

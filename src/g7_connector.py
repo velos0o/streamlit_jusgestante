@@ -88,7 +88,7 @@ class G7Connector:
                     {"fieldName": "STAGE_ID", "values": ["WON"], "type": "INCLUDE", "operator": "EQUALS"}
                 ]
             ],
-            "fields": [{"name": "ID"}, {"name": "ASSIGNED_BY"}]
+            "fields": [{"name": "ID"}, {"name": "ASSIGNED_BY"}, {"name": "TITLE"}]
         }
         initial_deals_df = self._execute_bi_query("crm_deal", deals_payload)
 
@@ -104,7 +104,7 @@ class G7Connector:
         # Etapa 2: Buscar campos customizados
         uf_payload = {
             "dimensionsFilters": [[{"fieldName": "DEAL_ID", "values": deal_ids, "type": "INCLUDE", "operator": "EQUALS"}]],
-            "fields": [{"name": "DEAL_ID"}, {"name": "UF_CRM_PRODUTO"}]
+            "fields": [{"name": "DEAL_ID"}, {"name": "UF_CRM_PRODUTO"}, {"name": "UF_CRM_DATA_FECHAMENTO1"}]
         }
         all_uf_df = self._execute_bi_query("crm_deal_uf", uf_payload)
 
@@ -126,11 +126,25 @@ class G7Connector:
             if filtered_uf_df.empty:
                 return pd.DataFrame()
 
-            # Etapa 4: Juntar resultados
-            filtered_uf_df['DEAL_ID'] = pd.to_numeric(filtered_uf_df['DEAL_ID'], errors='coerce')
-            filtered_deal_ids = filtered_uf_df['DEAL_ID'].dropna().unique()
-            final_deals_df = initial_deals_df[initial_deals_df['ID'].isin(filtered_deal_ids)]
-            return final_deals_df
+            # Etapa 4: Juntar resultados de forma correta
+            filtered_deal_ids = filtered_uf_df['DEAL_ID'].dropna().astype(str).unique()
+            deals_with_right_product_df = initial_deals_df[initial_deals_df['ID'].astype(str).isin(filtered_deal_ids)]
+
+            # Prepara os DataFrames para o merge
+            date_info_df = filtered_uf_df[['DEAL_ID', 'UF_CRM_DATA_FECHAMENTO1']].copy()
+            date_info_df['DEAL_ID'] = date_info_df['DEAL_ID'].astype(str)
+            deals_with_right_product_df['ID'] = deals_with_right_product_df['ID'].astype(str)
+
+            # Junta o DataFrame principal com as informações de data
+            final_df = pd.merge(
+                deals_with_right_product_df,
+                date_info_df,
+                left_on='ID',
+                right_on='DEAL_ID',
+                how='left'
+            )
+            final_df.drop(columns=['DEAL_ID'], inplace=True, errors='ignore')
+            return final_df
         else:
             return pd.DataFrame()
 
