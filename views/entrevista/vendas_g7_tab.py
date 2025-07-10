@@ -9,10 +9,68 @@ from src.g7_connector import G7Connector, G7ApiError
 
 @st.cache_data(ttl=1800) # Cache dos dados por 30 minutos (1800 segundos)
 def get_cached_g7_data():
-    """Função cacheada para buscar os dados da G7."""
-    connector = G7Connector()
-    deals_df = connector.get_processo_won_deals()
-    return deals_df
+    """Função de wrapper para cachear os dados da G7."""
+    return get_g7_data()
+
+def get_g7_data():
+    """
+    Busca dados de vendas da G7 Assessoria, enriquecendo-os com campos personalizados.
+    Filtra negócios EXCLUSIVAMENTE na etapa 'ENVIADO P/ FORMALIZAÇÃO' (UC_IV0DI0).
+    """
+    g7_connector = G7Connector()
+    
+    filter_params = {'STAGE_ID': 'UC_IV0DI0'}
+    
+    # Seleciona apenas os campos principais da entidade 'crm.deal'
+    main_select_fields = ['ID', 'TITLE', 'ASSIGNED_BY', 'OPPORTUNITY']
+
+    try:
+        # 1. Buscar os dados da entidade principal (crm_deal)
+        main_df = g7_connector.get_all_entities(
+            entity_name='crm_deal', # Correção: de 'crm.deal' para 'crm_deal'
+            filter_params=filter_params, 
+            select_fields=main_select_fields
+        )
+
+        if main_df.empty:
+            return pd.DataFrame()
+
+        # 2. Obter os IDs dos negócios encontrados para buscar os campos UF
+        deal_ids = main_df['ID'].tolist()
+        
+        # 3. Buscar os dados da tabela de campos personalizados (crm_deal_uf)
+        # CORREÇÃO: A chave correta para filtrar e selecionar é DEAL_ID, não VALUE_ID.
+        uf_select_fields = ['DEAL_ID', 'UF_CRM_DEAL_ENVIADA_PROCESS', 'UF_CRM_DATA_FECHAMENTO1']
+        uf_df = g7_connector.get_all_entities(
+            entity_name='crm_deal_uf',
+            filter_params={'DEAL_ID': deal_ids},
+            select_fields=uf_select_fields
+        )
+
+        # 4. Juntar os dois DataFrames
+        if not uf_df.empty:
+            # Converte IDs para o mesmo tipo para garantir a junção correta
+            main_df['ID'] = main_df['ID'].astype(str)
+            uf_df['DEAL_ID'] = uf_df['DEAL_ID'].astype(str)
+            # Junta os dataframes usando as chaves corretas: ID (principal) e DEAL_ID (campos UF)
+            full_df = pd.merge(main_df, uf_df, left_on='ID', right_on='DEAL_ID', how='left')
+        else:
+            full_df = main_df
+            # Adiciona colunas UF vazias para evitar erros posteriores se não houver dados UF
+            if 'UF_CRM_DEAL_ENVIADA_PROCESS' not in full_df.columns:
+                full_df['UF_CRM_DEAL_ENVIADA_PROCESS'] = pd.NaT
+            if 'UF_CRM_DATA_FECHAMENTO1' not in full_df.columns:
+                 full_df['UF_CRM_DATA_FECHAMENTO1'] = pd.NaT
+
+        if 'OPPORTUNITY' in full_df.columns:
+            full_df['OPPORTUNITY'] = pd.to_numeric(full_df['OPPORTUNITY'], errors='coerce').fillna(0)
+            
+        return full_df
+
+    except Exception as e:
+        st.error(f"Erro ao buscar dados detalhados da G7: {e}")
+        return pd.DataFrame()
+
 
 def render_vendas_g7_tab():
     """Renderiza a tabela de 'Vendas - Process G7'."""

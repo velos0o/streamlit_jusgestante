@@ -84,22 +84,37 @@ def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
             st.warning("Coluna 'UF_CRM_ID_G7' não encontrada nos dados da entrevista. Não é possível verificar a sincronização.")
             return
 
-        # Garante que os IDs são strings para comparação
-        ids_g7 = set(df_g7['ID'].astype(str))
-        ids_jusgestante_link = set(df_entrevista['UF_CRM_ID_G7'].dropna().astype(str))
+        # Limpeza "forense" dos IDs para garantir uma comparação robusta
+        # Remove espaços, converte para string, e lida com formatos como '12345.0'
+        
+        # Limpa IDs da G7
+        cleaned_g7_ids = df_g7['ID'].astype(str).str.strip().str.split('.').str[0]
+        ids_g7 = set(cleaned_g7_ids[cleaned_g7_ids.str.len() > 0])
 
+        # Limpa IDs da JusGestante
+        cleaned_jusgestante_ids = df_entrevista['UF_CRM_ID_G7'].dropna().astype(str).str.strip().str.split('.').str[0]
+        ids_jusgestante_link = set(cleaned_jusgestante_ids[cleaned_jusgestante_ids.str.len() > 0])
+        
         g7_ids_not_in_jusgestante = ids_g7 - ids_jusgestante_link
 
         if not g7_ids_not_in_jusgestante:
-            st.success("✅ Todas as vendas da G7 estão sincronizadas corretamente.")
+            st.markdown("""
+            <div style="background-color: #E8F5E9; color: #1B5E20; padding: 1rem; border-radius: 0.5rem; border-left: 6px solid #4CAF50; display: flex; align-items: center; margin-top: 1rem; margin-bottom: 1rem;">
+                <span style="font-size: 1.5rem; margin-right: 1rem;">✅</span>
+                <div>
+                    <h5 style="margin: 0; padding: 0; color: #1B5E20; font-weight: bold;">Tudo Certo!</h5>
+                    <p style="margin: 0; padding: 0; color: #1B5E20;">Nenhuma pendência de sincronização encontrada.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         else:
             total_divergencias = len(g7_ids_not_in_jusgestante)
             divergencias_df = df_g7[df_g7['ID'].astype(str).isin(g7_ids_not_in_jusgestante)].copy()
 
-            # Calcula o tempo parado (horas/dias)
+            # Calcula o tempo parado (horas/dias) usando o novo campo de data
             oldest_time_str = "N/A"
-            if 'UF_CRM_DATA_FECHAMENTO1' in divergencias_df.columns:
-                divergencias_df['FECHAMENTO_DT'] = pd.to_datetime(divergencias_df['UF_CRM_DATA_FECHAMENTO1'], errors='coerce')
+            if 'UF_CRM_DEAL_ENVIADA_PROCESS' in divergencias_df.columns:
+                divergencias_df['FECHAMENTO_DT'] = pd.to_datetime(divergencias_df['UF_CRM_DEAL_ENVIADA_PROCESS'], errors='coerce')
                 
                 # Calcula o tempo parado para cada linha
                 now = datetime.now()
@@ -119,14 +134,19 @@ def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
             # Mensagens dinâmicas
             texto_tempo = f"e estão sem atendimento há até {oldest_time_str}." if oldest_time_str != "N/A" else "e precisam ser sincronizadas."
             titulo_alerta = f"⚠️ Alerta: {total_divergencias} Vendas da G7 não foram enviadas para o Funil de Entrevista {texto_tempo}"
-            texto_ajuda = "A lista abaixo mostra os negócios da G7 que precisam ser criados no funil de Entrevista. A coluna 'Tempo Parado' indica há quanto tempo a venda foi fechada."
+            texto_ajuda = "A lista abaixo mostra os negócios da G7 que foram movidos para a etapa de formalização e precisam ser criados no funil de Entrevista. A coluna 'Tempo Parado' indica há quanto tempo o negócio foi movido."
 
             with st.expander(titulo_alerta, expanded=True):
                 st.markdown(texto_ajuda)
                 
                 # Prepara o DataFrame para exibição
-                colunas_para_exibir = ['ID', 'TITLE', 'TEMPO_PARADO']
-                rename_map = {'ID': 'ID do Card (G7)', 'TITLE': 'Nome do Negócio', 'TEMPO_PARADO': 'Tempo Parado'}
+                colunas_para_exibir = ['ID', 'TITLE', 'ASSIGNED_BY', 'TEMPO_PARADO']
+                rename_map = {
+                    'ID': 'ID do Card (G7)', 
+                    'TITLE': 'Nome do Negócio', 
+                    'ASSIGNED_BY': 'Responsável',
+                    'TEMPO_PARADO': 'Tempo Parado'
+                }
 
                 st.dataframe(
                     divergencias_df[colunas_para_exibir].rename(columns=rename_map),

@@ -76,79 +76,46 @@ class G7Connector:
         
         return pd.DataFrame()
 
-    def get_processo_won_deals(self) -> pd.DataFrame:
+    def get_all_entities(self, entity_name: str, filter_params: Optional[Dict] = None, select_fields: Optional[List[str]] = None) -> pd.DataFrame:
         """
-        Busca deals 'GANHOS' (WON) para produtos específicos, com filtro robusto.
+        Busca entidades do Bitrix24 BI Connector com filtros e seleção de campos dinâmicos.
+
+        Args:
+            entity_name (str): Nome da tabela no BI Connector (ex: 'crm_deal', 'crm_deal_uf').
+            filter_params (Optional[Dict]): Dicionário com filtros a serem aplicados. 
+                                            Ex: {'STAGE_ID': 'WON', 'CATEGORY_ID': 0}
+            select_fields (Optional[List[str]]): Lista de campos a serem retornados. 
+                                                 Ex: ['ID', 'TITLE']
+
+        Returns:
+            pd.DataFrame: DataFrame com os resultados.
         """
-        # Etapa 1: Buscar deals da tabela principal
-        deals_payload = {
-            "dimensionsFilters": [
-                [
-                    {"fieldName": "CATEGORY_ID", "values": [0], "type": "INCLUDE", "operator": "EQUALS"},
-                    {"fieldName": "STAGE_ID", "values": ["WON"], "type": "INCLUDE", "operator": "EQUALS"}
-                ]
-            ],
-            "fields": [{"name": "ID"}, {"name": "ASSIGNED_BY"}, {"name": "TITLE"}]
-        }
-        initial_deals_df = self._execute_bi_query("crm_deal", deals_payload)
+        payload = {"fields": []}
 
-        if initial_deals_df.empty:
-            return pd.DataFrame()
+        # Constrói a lista de campos para o 'select' da consulta
+        if select_fields:
+            payload["fields"] = [{"name": field} for field in select_fields]
+        
+        # Constrói a cláusula de filtro
+        if filter_params:
+            dimensions_filter = []
+            for field, value in filter_params.items():
+                # Garante que o valor seja uma lista para a API
+                values_list = value if isinstance(value, list) else [value]
+                dimensions_filter.append({
+                    "fieldName": field,
+                    "values": values_list,
+                    "type": "INCLUDE",
+                    "operator": "EQUALS"
+                })
+            payload["dimensionsFilters"] = [dimensions_filter]
 
-        initial_deals_df['ID'] = pd.to_numeric(initial_deals_df['ID'], errors='coerce')
-        deal_ids = initial_deals_df['ID'].dropna().astype(int).tolist()
-
-        if not deal_ids:
-            return pd.DataFrame()
-
-        # Etapa 2: Buscar campos customizados
-        uf_payload = {
-            "dimensionsFilters": [[{"fieldName": "DEAL_ID", "values": deal_ids, "type": "INCLUDE", "operator": "EQUALS"}]],
-            "fields": [{"name": "DEAL_ID"}, {"name": "UF_CRM_PRODUTO"}, {"name": "UF_CRM_DATA_FECHAMENTO1"}]
-        }
-        all_uf_df = self._execute_bi_query("crm_deal_uf", uf_payload)
-
-        if all_uf_df.empty:
-            return pd.DataFrame()
-
-        # Etapa 3: Aplicar filtro de produto localmente, com limpeza de dados robusta
-        if 'UF_CRM_PRODUTO' in all_uf_df.columns:
-            produtos_desejados = ["PROCESSO", "PROCESSO + AUXÍLIO"]
-            
-            # Limpa e normaliza a coluna de produtos de forma definitiva
-            # O .str.strip() remove o espaço no final que encontramos
-            produtos_limpos = all_uf_df['UF_CRM_PRODUTO'].astype(str).str.strip().str.upper()
-            
-            # Filtra o dataframe de campos customizados
-            mask = produtos_limpos.isin(produtos_desejados)
-            filtered_uf_df = all_uf_df[mask]
-
-            if filtered_uf_df.empty:
-                return pd.DataFrame()
-
-            # Etapa 4: Juntar resultados de forma correta
-            filtered_deal_ids = filtered_uf_df['DEAL_ID'].dropna().astype(str).unique()
-            deals_with_right_product_df = initial_deals_df[initial_deals_df['ID'].astype(str).isin(filtered_deal_ids)]
-
-            # Prepara os DataFrames para o merge
-            date_info_df = filtered_uf_df[['DEAL_ID', 'UF_CRM_DATA_FECHAMENTO1']].copy()
-            date_info_df['DEAL_ID'] = date_info_df['DEAL_ID'].astype(str)
-            deals_with_right_product_df['ID'] = deals_with_right_product_df['ID'].astype(str)
-
-            # Junta o DataFrame principal com as informações de data
-            final_df = pd.merge(
-                deals_with_right_product_df,
-                date_info_df,
-                left_on='ID',
-                right_on='DEAL_ID',
-                how='left'
-            )
-            final_df.drop(columns=['DEAL_ID'], inplace=True, errors='ignore')
-            return final_df
-        else:
-            return pd.DataFrame()
+        return self._execute_bi_query(entity_name, payload)
 
     def get_users(self) -> pd.DataFrame:
         """Busca todos os usuários da conta G7 para mapear IDs para nomes."""
         st.warning("A busca de nomes de usuários da conta G7 não está implementada. A tabela mostrará o nome do campo 'ASSIGNED_BY'.")
-        return pd.DataFrame(columns=['ID', 'NAME', 'LAST_NAME']) 
+        return pd.DataFrame(columns=['ID', 'NAME', 'LAST_NAME'])
+
+# A função get_processo_won_deals() foi removida pois sua funcionalidade
+# agora é coberta pela nova get_all_entities() e pela lógica em vendas_g7_tab.py 
