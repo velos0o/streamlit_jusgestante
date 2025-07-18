@@ -101,3 +101,38 @@ def render_vendas_g7_tab():
         st.error(f"Erro de API ao buscar dados da G7: {e}")
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado: {e}") 
+
+@st.cache_data(ttl=1800) # Cache dos dados por 30 minutos (1800 segundos)
+def get_g7_vendas_won_data():
+    """
+    Busca todos os negócios de Vendas (category_id=0) da G7 que estão na etapa 'Ganho' (WON).
+    Aplica um filtro duplo (API e pandas) para garantir a precisão.
+    """
+    g7_connector = G7Connector()
+    
+    filter_params = {
+        'CATEGORY_ID': 0,
+        'STAGE_ID': 'WON'
+    }
+    
+    # Pedimos também o STAGE_ID para a verificação em pandas
+    select_fields = ['ID', 'STAGE_ID']
+
+    try:
+        df = g7_connector.get_all_entities(
+            entity_name='crm_deal',
+            filter_params=filter_params, 
+            select_fields=select_fields
+        )
+
+        if not df.empty:
+            # Filtro de segurança em pandas para garantir que apenas 'WON' passe
+            df_won = df[df['STAGE_ID'] == 'WON'].copy()
+            return df_won
+        
+        return df
+
+    except Exception as e:
+        # Log para o console em vez de mostrar erro na UI para verificação em segundo plano
+        print(f"Erro ao buscar dados de vendas ganhas da G7: {e}") 
+        return pd.DataFrame() 

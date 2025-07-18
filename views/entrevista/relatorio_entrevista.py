@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
 
 from src.data_service import DataService
 from views.entrevista.analise_responsaveis_entrevista import render_analise_responsaveis_entrevista
-from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data
+from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data, get_g7_vendas_won_data
 
 def _render_persistent_alert_popup(count: int):
     """Renderiza um pop-up de alerta fixo e animado, saindo da borda da tela."""
@@ -158,13 +158,79 @@ def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
         st.error(f"Ocorreu um erro ao verificar a sincronização: {e}")
 
 
+def _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista: pd.DataFrame):
+    """
+    Verifica se negócios marcados para finalização na JusGestante 
+    foram de fato movidos para 'Ganho' na G7.
+    """
+    st.subheader("Sincronização JusGestante -> G7 (Finalização)")
+
+    try:
+        # 1. Filtrar negócios na JusGestante que devem ser finalizados na G7
+        df_para_finalizar = df_entrevista[df_entrevista['STAGE_ID'] == 'C11:UC_VDDDMG'].copy()
+
+        if 'UF_CRM_ID_G7' not in df_para_finalizar.columns:
+            st.warning("Coluna 'UF_CRM_ID_G7' não encontrada. Não é possível verificar a finalização.")
+            # Movemos a verificação de df vazio para depois, para que a seção de debug sempre apareça
+            # se houver a coluna necessária.
+        
+        # 2. Buscar os IDs dos negócios 'Ganhos' na G7
+        df_g7_won = get_g7_vendas_won_data()
+        ids_g7_won = set(df_g7_won['ID'].astype(str).str.strip()) if not df_g7_won.empty else set()
+        
+        if df_para_finalizar.empty:
+            st.info("Nenhum negócio aguardando finalização na G7 no momento.")
+            return
+
+        # 3. Identificar os que estão pendentes
+        df_para_finalizar['UF_CRM_ID_G7_CLEAN'] = df_para_finalizar['UF_CRM_ID_G7'].dropna().astype(str).str.strip().str.split('.').str[0]
+        
+        pendentes_mask = ~df_para_finalizar['UF_CRM_ID_G7_CLEAN'].isin(ids_g7_won)
+        df_pendentes = df_para_finalizar[pendentes_mask]
+
+        # 4. Exibir o resultado
+        if df_pendentes.empty:
+            st.markdown("""
+            <div style="background-color: #E8F5E9; color: #1B5E20; padding: 1rem; border-radius: 0.5rem; border-left: 6px solid #4CAF50; display: flex; align-items: center; margin-top: 1rem; margin-bottom: 1rem;">
+                <span style="font-size: 1.5rem; margin-right: 1rem;">✅</span>
+                <div>
+                    <h5 style="margin: 0; padding: 0; color: #1B5E20; font-weight: bold;">Sincronização em Dia!</h5>
+                    <p style="margin: 0; padding: 0; color: #1B5E20;">Todos os negócios enviados para finalização foram atualizados na G7.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            total_pendencias = len(df_pendentes)
+            titulo_alerta = f"⚠️ Alerta: {total_pendencias} Negócios aguardando finalização na G7"
+            texto_ajuda = "A lista abaixo mostra os negócios que foram marcados como 'Enviar para G7 (Assinar)' na JusGestante, mas ainda não foram movidos para a etapa 'Ganho' no funil de Vendas da G7."
+
+            with st.expander(titulo_alerta, expanded=True):
+                st.markdown(texto_ajuda)
+                
+                colunas_para_exibir = ['TITLE', 'ASSIGNED_BY_NAME', 'UF_CRM_ID_G7']
+                rename_map = {
+                    'TITLE': 'Nome do Negócio', 
+                    'ASSIGNED_BY_NAME': 'Responsável (JusGestante)',
+                    'UF_CRM_ID_G7': 'ID do Card (G7)'
+                }
+
+                st.dataframe(
+                    df_pendentes[colunas_para_exibir].rename(columns=rename_map),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao verificar a sincronização para a G7: {e}")
+
+
 def render_relatorio_entrevista():
     """Renderiza um relatório consolidado com a análise de desempenho, as vendas da G7 e a análise de validação."""
-    
     st.title("Relatório de Entrevista")
+
     data_service = DataService()
 
-    # --- Filtros ---
+    # --- Filtros de Data e Responsável ---
     with st.expander("🔍 Filtros (Análise de Desempenho)", expanded=True):
         st.markdown("📅 **Data de Criação:**")
         col1, col2 = st.columns(2)
@@ -193,6 +259,12 @@ def render_relatorio_entrevista():
 
     # --- Seção de Alerta de Sincronização ---
     _render_sincronizacao_alerta(df_entrevista)
+    
+    st.markdown("---") # Divisor
+    
+    # --- Nova Seção de Alerta de Finalização (JusGestante -> G7) ---
+    _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista)
+
 
     # --- Seção de Análise de Desempenho (JusGestante) ---
     st.markdown("---")
