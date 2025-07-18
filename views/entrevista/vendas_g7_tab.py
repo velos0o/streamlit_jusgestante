@@ -102,20 +102,19 @@ def render_vendas_g7_tab():
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado: {e}") 
 
-@st.cache_data(ttl=1800) # Cache dos dados por 30 minutos (1800 segundos)
-def get_g7_vendas_won_data():
+@st.cache_data(ttl=1800)
+def get_g7_deals_for_sync_check():
     """
-    Busca todos os negócios de Vendas (category_id=0) da G7 que estão na etapa 'Ganho' (WON).
-    Aplica um filtro duplo (API e pandas) para garantir a precisão.
+    Busca todos os negócios de Vendas (category_id=0) da G7, exceto aqueles
+    na etapa 'UC_IV0DI0', para a verificação de sincronização.
     """
     g7_connector = G7Connector()
     
+    # Buscamos todos os negócios do funil de Vendas, o filtro de etapa será feito em pandas
     filter_params = {
-        'CATEGORY_ID': 0,
-        'STAGE_ID': 'WON'
+        'CATEGORY_ID': 0
     }
     
-    # Pedimos também o STAGE_ID para a verificação em pandas
     select_fields = ['ID', 'STAGE_ID']
 
     try:
@@ -126,13 +125,12 @@ def get_g7_vendas_won_data():
         )
 
         if not df.empty:
-            # Filtro de segurança em pandas para garantir que apenas 'WON' passe
-            df_won = df[df['STAGE_ID'] == 'WON'].copy()
-            return df_won
+            # Filtro em pandas para excluir a etapa 'UC_IV0DI0'
+            df_filtered = df[df['STAGE_ID'] != 'UC_IV0DI0'].copy()
+            return df_filtered
         
         return df
 
     except Exception as e:
-        # Log para o console em vez de mostrar erro na UI para verificação em segundo plano
-        print(f"Erro ao buscar dados de vendas ganhas da G7: {e}") 
+        print(f"Erro ao buscar dados da G7 para verificação de sincronia: {e}") 
         return pd.DataFrame() 

@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
 
 from src.data_service import DataService
 from views.entrevista.analise_responsaveis_entrevista import render_analise_responsaveis_entrevista
-from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data, get_g7_vendas_won_data
+from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data, get_g7_deals_for_sync_check
 
 def _render_persistent_alert_popup(count: int):
     """Renderiza um pop-up de alerta fixo e animado, saindo da borda da tela."""
@@ -160,33 +160,34 @@ def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
 
 def _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista: pd.DataFrame):
     """
-    Verifica se negócios marcados para finalização na JusGestante 
-    foram de fato movidos para 'Ganho' na G7.
+    Verifica se negócios marcados para finalização ou como perdidos na JusGestante 
+    existem e estão ativos (não estão na etapa 'UC_IV0DI0') na G7.
     """
-    st.subheader("Sincronização JusGestante -> G7 (Finalização)")
+    st.subheader("Sincronização JusGestante -> G7 (Status de Negócios)")
 
     try:
-        # 1. Filtrar negócios na JusGestante que devem ser finalizados na G7
-        df_para_finalizar = df_entrevista[df_entrevista['STAGE_ID'] == 'C11:UC_VDDDMG'].copy()
+        # 1. Filtrar negócios na JusGestante que devem ser finalizados ou que foram perdidos
+        stages_to_check = ['C11:UC_VDDDMG', 'C11:LOSE']
+        df_a_verificar = df_entrevista[df_entrevista['STAGE_ID'].isin(stages_to_check)].copy()
 
-        if 'UF_CRM_ID_G7' not in df_para_finalizar.columns:
+        if 'UF_CRM_ID_G7' not in df_a_verificar.columns:
             st.warning("Coluna 'UF_CRM_ID_G7' não encontrada. Não é possível verificar a finalização.")
             # Movemos a verificação de df vazio para depois, para que a seção de debug sempre apareça
             # se houver a coluna necessária.
         
-        # 2. Buscar os IDs dos negócios 'Ganhos' na G7
-        df_g7_won = get_g7_vendas_won_data()
-        ids_g7_won = set(df_g7_won['ID'].astype(str).str.strip()) if not df_g7_won.empty else set()
+        # 2. Buscar os negócios válidos da G7 (todos, exceto etapa 'UC_IV0DI0')
+        df_g7_valid = get_g7_deals_for_sync_check()
+        ids_g7_valid = set(df_g7_valid['ID'].astype(str).str.strip()) if not df_g7_valid.empty else set()
         
-        if df_para_finalizar.empty:
-            st.info("Nenhum negócio aguardando finalização na G7 no momento.")
+        if df_a_verificar.empty:
+            st.info("Nenhum negócio aguardando finalização ou perdido para verificar no momento.")
             return
 
         # 3. Identificar os que estão pendentes
-        df_para_finalizar['UF_CRM_ID_G7_CLEAN'] = df_para_finalizar['UF_CRM_ID_G7'].dropna().astype(str).str.strip().str.split('.').str[0]
+        df_a_verificar['UF_CRM_ID_G7_CLEAN'] = df_a_verificar['UF_CRM_ID_G7'].dropna().astype(str).str.strip().str.split('.').str[0]
         
-        pendentes_mask = ~df_para_finalizar['UF_CRM_ID_G7_CLEAN'].isin(ids_g7_won)
-        df_pendentes = df_para_finalizar[pendentes_mask]
+        pendentes_mask = ~df_a_verificar['UF_CRM_ID_G7_CLEAN'].isin(ids_g7_valid)
+        df_pendentes = df_a_verificar[pendentes_mask]
 
         # 4. Exibir o resultado
         if df_pendentes.empty:
@@ -195,22 +196,23 @@ def _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista: pd.DataFrame
                 <span style="font-size: 1.5rem; margin-right: 1rem;">✅</span>
                 <div>
                     <h5 style="margin: 0; padding: 0; color: #1B5E20; font-weight: bold;">Sincronização em Dia!</h5>
-                    <p style="margin: 0; padding: 0; color: #1B5E20;">Todos os negócios enviados para finalização foram atualizados na G7.</p>
+                    <p style="margin: 0; padding: 0; color: #1B5E20;">Todos os negócios que saíram do funil de Entrevista estão com status válido na G7.</p>
                 </div>
             </div>
             """, unsafe_allow_html=True)
         else:
             total_pendencias = len(df_pendentes)
-            titulo_alerta = f"⚠️ Alerta: {total_pendencias} Negócios aguardando finalização na G7"
-            texto_ajuda = "A lista abaixo mostra os negócios que foram marcados como 'Enviar para G7 (Assinar)' na JusGestante, mas ainda não foram movidos para a etapa 'Ganho' no funil de Vendas da G7."
+            titulo_alerta = f"⚠️ Alerta: {total_pendencias} Negócios com status inconsistente na G7"
+            texto_ajuda = "A lista abaixo mostra negócios que estão 'Perdidos' ou 'Aguardando Assinatura' na JusGestante, mas não foram encontrados ou estão em uma etapa de exclusão ('UC_IV0DI0') na G7."
 
             with st.expander(titulo_alerta, expanded=True):
                 st.markdown(texto_ajuda)
                 
-                colunas_para_exibir = ['TITLE', 'ASSIGNED_BY_NAME', 'UF_CRM_ID_G7']
+                colunas_para_exibir = ['TITLE', 'ASSIGNED_BY_NAME', 'STAGE_ID', 'UF_CRM_ID_G7']
                 rename_map = {
                     'TITLE': 'Nome do Negócio', 
                     'ASSIGNED_BY_NAME': 'Responsável (JusGestante)',
+                    'STAGE_ID': 'Etapa (JusGestante)',
                     'UF_CRM_ID_G7': 'ID do Card (G7)'
                 }
 
