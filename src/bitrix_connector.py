@@ -158,11 +158,13 @@ class BitrixConnector:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        # Converte colunas de data
+        # Converte colunas de data e ajusta fuso horário (-6 horas)
         date_cols = ['DATE_CREATE', 'DATE_MODIFY', 'BEGINDATE', 'CLOSEDATE']
         for col in date_cols:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
+                if not df[col].isna().all():  # Verifica se há datas válidas na coluna
+                    df[col] = df[col] - pd.Timedelta(hours=6)
         
         return df
 

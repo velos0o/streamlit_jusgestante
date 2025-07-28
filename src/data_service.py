@@ -238,23 +238,25 @@ class DataService:
             
             # Converte a coluna UF_CRM_DATA_FECHAMENTO1 para datetime após a mesclagem
             if 'UF_CRM_DATA_FECHAMENTO1' in df.columns:
-                df['UF_CRM_DATA_FECHAMENTO1'] = pd.to_datetime(df['UF_CRM_DATA_FECHAMENTO1'], errors='coerce').dt.date
+                df['UF_CRM_DATA_FECHAMENTO1'] = pd.to_datetime(df['UF_CRM_DATA_FECHAMENTO1'], errors='coerce')
+                if not df['UF_CRM_DATA_FECHAMENTO1'].isna().all():
+                    df['UF_CRM_DATA_FECHAMENTO1'] = df['UF_CRM_DATA_FECHAMENTO1'] - pd.Timedelta(hours=6)
+                df['UF_CRM_DATA_FECHAMENTO1'] = df['UF_CRM_DATA_FECHAMENTO1'].dt.date
 
             # Converte a coluna UF_CRM_VALIDADO_DATA para datetime
             if 'UF_CRM_VALIDADO_DATA' in df.columns:
-                df['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df['UF_CRM_VALIDADO_DATA'], errors='coerce').dt.date
+                df['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df['UF_CRM_VALIDADO_DATA'], errors='coerce')
+                if not df['UF_CRM_VALIDADO_DATA'].isna().all():
+                    df['UF_CRM_VALIDADO_DATA'] = df['UF_CRM_VALIDADO_DATA'] - pd.Timedelta(hours=6)
+                df['UF_CRM_VALIDADO_DATA'] = df['UF_CRM_VALIDADO_DATA'].dt.date
 
             # Converter a coluna de Data de Audiência (UF_CRM_1731693426655)
             DATA_AUDIENCIA_FIELD = 'UF_CRM_1731693426655'
             if DATA_AUDIENCIA_FIELD in df.columns:
-                # Tenta converter para datetime. O formato 'dd/mm/yyyy' será tratado se pd.to_datetime inferir corretamente.
-                # Usar dayfirst=True se o formato for ambiguo e for de fato dd/mm/yyyy.
-                # Se o campo já for datetime ou timestamp numérico, pd.to_datetime geralmente lida bem.
-                df[DATA_AUDIENCIA_FIELD] = pd.to_datetime(df[DATA_AUDIENCIA_FIELD], errors='coerce') 
-                # Apenas a data, zerando o componente de hora, ou .dt.date para objeto date.
-                # df[DATA_AUDIENCIA_FIELD] = df[DATA_AUDIENCIA_FIELD].dt.normalize() # Para manter como datetime64[ns] com hora 00:00:00
-                # Ou, para converter para objeto date do Python (pode ser mais simples para algumas manipulações)
-                # df[DATA_AUDIENCIA_FIELD] = df[DATA_AUDIENCIA_FIELD].dt.date # Isso altera o dtype para object
+                df[DATA_AUDIENCIA_FIELD] = pd.to_datetime(df[DATA_AUDIENCIA_FIELD], errors='coerce')
+                if not df[DATA_AUDIENCIA_FIELD].isna().all():
+                    df[DATA_AUDIENCIA_FIELD] = df[DATA_AUDIENCIA_FIELD] - pd.Timedelta(hours=6)
+                df[DATA_AUDIENCIA_FIELD] = df[DATA_AUDIENCIA_FIELD].dt.date
 
         # Enriquece com informações dos funis
         df = self._enrich_with_category_info(df)

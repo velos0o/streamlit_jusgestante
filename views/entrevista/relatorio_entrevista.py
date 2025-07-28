@@ -114,7 +114,10 @@ def _render_sincronizacao_alerta(df_entrevista: pd.DataFrame):
             # Calcula o tempo parado (horas/dias) usando o novo campo de data
             oldest_time_str = "N/A"
             if 'UF_CRM_DEAL_ENVIADA_PROCESS' in divergencias_df.columns:
+                # Ajusta o fuso horário (-6 horas) ao converter para datetime
                 divergencias_df['FECHAMENTO_DT'] = pd.to_datetime(divergencias_df['UF_CRM_DEAL_ENVIADA_PROCESS'], errors='coerce')
+                if not divergencias_df['FECHAMENTO_DT'].isna().all():
+                    divergencias_df['FECHAMENTO_DT'] = divergencias_df['FECHAMENTO_DT'] - pd.Timedelta(hours=6)
                 
                 # Calcula o tempo parado para cada linha
                 now = datetime.now()
@@ -326,7 +329,11 @@ def _render_analise_validacao(df_entrevista: pd.DataFrame):
         df_filtrado_val = df_validados.dropna(subset=['UF_CRM_VALIDADO_DATA'])
         if not df_filtrado_val.empty:
             # Garante que a data no dataframe é um objeto date para comparação
-            df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] = pd.to_datetime(df_filtrado_val['UF_CRM_VALIDADO_DATA']).dt.date
+            # Ajusta o fuso horário (-6 horas) ao converter para datetime
+            df_filtrado_val['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df_filtrado_val['UF_CRM_VALIDADO_DATA'], errors='coerce')
+            if not df_filtrado_val['UF_CRM_VALIDADO_DATA'].isna().all():
+                df_filtrado_val['UF_CRM_VALIDADO_DATA'] = df_filtrado_val['UF_CRM_VALIDADO_DATA'] - pd.Timedelta(hours=6)
+            df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] = df_filtrado_val['UF_CRM_VALIDADO_DATA'].dt.date
             df_validados = df_filtrado_val[
                 (df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] >= data_validacao_inicio) &
                 (df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] <= data_validacao_fim)
