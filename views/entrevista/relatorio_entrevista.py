@@ -235,7 +235,17 @@ def render_relatorio_entrevista():
 
     data_service = DataService()
 
-    # --- Filtros de Data e Responsável ---
+    # --- Carregamento de Dados para Sincronização (SEM FILTROS) ---
+    df_entrevista_sync = None
+    with st.spinner("Verificando sincronização de dados..."):
+        try:
+            # Carrega todos os dados do funil de entrevista para garantir que a sincronização seja completa
+            df_entrevista_sync = data_service.get_entrevista_data(start_date=None, end_date=None)
+        except Exception as e:
+            st.error(f"Falha ao carregar dados para a verificação de sincronização: {e}")
+            # O relatório continua, mas as seções de sincronização podem não aparecer.
+
+    # --- Filtros de Data e Responsável (para análises de desempenho) ---
     with st.expander("🔍 Filtros (Análise de Desempenho)", expanded=True):
         st.markdown("📅 **Data de Criação:**")
         col1, col2 = st.columns(2)
@@ -246,43 +256,45 @@ def render_relatorio_entrevista():
         
         aplicar_filtro_data_criacao = st.checkbox("Aplicar filtro por Data de Criação", value=False, key="entrevista_aplicar_filtro_data_criacao")
 
-    # --- Carregamento de Dados Centralizado ---
-    df_entrevista = None
+    # --- Carregamento de Dados para Análise (com filtros) ---
+    df_entrevista_analise = None
     with st.spinner("Carregando dados da análise de desempenho..."):
         try:
             if aplicar_filtro_data_criacao:
-                df_entrevista = data_service.get_entrevista_data(data_criacao_inicio, data_criacao_fim)
+                df_entrevista_analise = data_service.get_entrevista_data(data_criacao_inicio, data_criacao_fim)
             else:
-                df_entrevista = data_service.get_entrevista_data(None, None)
+                # Se o filtro não for aplicado, usamos os dados já carregados para a sincronização
+                df_entrevista_analise = df_entrevista_sync
         except Exception as e:
-            st.error(f"Ocorreu um erro ao carregar os dados: {e}")
+            st.error(f"Ocorreu um erro ao carregar os dados para análise: {e}")
             st.stop()
             
-    if df_entrevista is None or df_entrevista.empty:
+    if df_entrevista_analise is None or df_entrevista_analise.empty:
         st.warning("Nenhum dado encontrado para o período selecionado.")
-        st.stop()
-
-    # --- Seção de Alerta de Sincronização ---
-    _render_sincronizacao_alerta(df_entrevista)
+        # Não paramos o relatório aqui para permitir que a seção de sincronia ainda seja exibida
     
-    st.markdown("---") # Divisor
-    
-    # --- Nova Seção de Alerta de Finalização (JusGestante -> G7) ---
-    _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista)
+    # --- Seção de Alerta de Sincronização (usa dados NÃO filtrados) ---
+    if df_entrevista_sync is not None:
+        _render_sincronizacao_alerta(df_entrevista_sync)
+        st.markdown("---") # Divisor
+        _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista_sync)
+    else:
+        st.info("Não foi possível carregar os dados para a verificação de sincronização.")
 
+    # --- Seções de Análise (usam dados FILTRADOS) ---
+    if df_entrevista_analise is not None and not df_entrevista_analise.empty:
+        st.markdown("---")
+        st.subheader("Análise de Desempenho (Funil de Entrevista)")
+        _render_analise_desempenho(df_entrevista_analise)
 
-    # --- Seção de Análise de Desempenho (JusGestante) ---
-    st.markdown("---")
-    st.subheader("Análise de Desempenho (Funil de Entrevista)")
-    _render_analise_desempenho(df_entrevista)
-
-    # --- Divisor e Seção de Vendas (G7) ---
-    st.markdown("---")
-    render_vendas_g7_tab()
-    
-    # --- Divisor e Seção de Análise de Validação (movida para o final) ---
-    st.markdown("---")
-    _render_analise_validacao(df_entrevista)
+        st.markdown("---")
+        render_vendas_g7_tab()
+        
+        st.markdown("---")
+        _render_analise_validacao(df_entrevista_analise)
+    else:
+        st.markdown("---")
+        st.warning("Nenhum dado de análise para exibir com os filtros atuais.")
 
 
 def _render_analise_desempenho(df_entrevista: pd.DataFrame):
