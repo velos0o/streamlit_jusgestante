@@ -143,6 +143,10 @@ def render_relatorio_comercial():
             key="aplicar_filtro_data_criacao"
         )
 
+        # Adiciona o modo de depuração
+        st.markdown("---")
+        debug_mode = st.checkbox("Modo Depuração de Datas")
+
         # Usa get_minimal_data_for_selectors para popular filtros de forma eficiente
         # Define os campos necessários para os seletores
         fields_for_selectors = ['STAGE_NAME', 'ASSIGNED_BY_NAME']
@@ -198,6 +202,23 @@ def render_relatorio_comercial():
             )
         else:
             responsaveis_selecionados = []
+
+    # Exibe os dados brutos se o modo de depuração estiver ativo
+    if debug_mode:
+        st.subheader("🕵️‍♂️ Modo Depuração: Dados Brutos")
+        with st.expander("Clique para ver os dados brutos antes do processamento"):
+            try:
+                deals_raw, uf_raw = data_service.get_raw_comercial_data(
+                    data_criacao_inicio if aplicar_filtro_data_criacao else None,
+                    data_criacao_fim if aplicar_filtro_data_criacao else None
+                )
+                st.markdown("#### Tabela de Deals (Bruto)")
+                st.dataframe(deals_raw)
+
+                st.markdown("#### Tabela UF (Bruto)")
+                st.dataframe(uf_raw)
+            except Exception as e:
+                st.error(f"Erro ao carregar dados brutos: {e}")
 
     # Carrega dados do funil comercial
     with st.spinner("Carregando dados..."):

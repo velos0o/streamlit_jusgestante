@@ -6,6 +6,7 @@ import os
 # Adiciona src ao path para imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 from src.g7_connector import G7Connector, G7ApiError
+from datetime import datetime, timedelta
 
 @st.cache_data(ttl=1800) # Cache dos dados por 30 minutos (1800 segundos)
 def get_cached_g7_data():
@@ -76,6 +77,17 @@ def render_vendas_g7_tab():
     """Renderiza a tabela de 'Vendas - Process G7'."""
     st.header("Vendas de Processos - G7 Assessoria")
 
+    # Adiciona os filtros de data
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Data de Início", datetime.now() - timedelta(days=30))
+    with col2:
+        end_date = st.date_input("Data de Fim", datetime.now())
+
+    # Converte as datas para o formato datetime para filtrar
+    start_date = datetime.combine(start_date, datetime.min.time())
+    end_date = datetime.combine(end_date, datetime.max.time())
+
     try:
         deals_df = get_cached_g7_data()
 
@@ -83,6 +95,21 @@ def render_vendas_g7_tab():
             st.info("Nenhuma venda de 'PROCESSO' ou 'PROCESSO + AUXÍLIO' encontrada no período.")
             return
 
+        # Garante que a coluna de data de venda exista e a converte para datetime
+        if 'UF_CRM_DEAL_ENVIADA_PROCESS' in deals_df.columns:
+            deals_df['UF_CRM_DEAL_ENVIADA_PROCESS'] = pd.to_datetime(deals_df['UF_CRM_DEAL_ENVIADA_PROCESS'], errors='coerce')
+
+            # Filtra o DataFrame com base no intervalo de datas selecionado
+            deals_df = deals_df[
+                (deals_df['UF_CRM_DEAL_ENVIADA_PROCESS'] >= start_date) &
+                (deals_df['UF_CRM_DEAL_ENVIADA_PROCESS'] <= end_date)
+            ]
+        else:
+            st.warning("A coluna 'Data de Venda' (UF_CRM_DEAL_ENVIADA_PROCESS) não foi encontrada.")
+            # Retorna para evitar erros se a coluna estiver ausente
+            return
+
+        # Recalcula as vendas após a filtragem
         vendas_por_responsavel = deals_df.groupby('ASSIGNED_BY').size().reset_index(name='Vendas')
         vendas_por_responsavel.rename(columns={'ASSIGNED_BY': 'Responsável'}, inplace=True)
 

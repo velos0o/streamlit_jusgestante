@@ -14,7 +14,7 @@ from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
 
-from src.data_service import DataService
+from src.data_service import DataService, clear_streamlit_cache
 from views.entrevista.analise_responsaveis_entrevista import render_analise_responsaveis_entrevista
 from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data, get_g7_deals_for_sync_check
 
@@ -233,6 +233,12 @@ def render_relatorio_entrevista():
     """Renderiza um relatório consolidado com a análise de desempenho, as vendas da G7 e a análise de validação."""
     st.title("Relatório de Entrevista")
 
+    # Botão para limpar o cache
+    if st.sidebar.button("Limpar Cache e Recarregar Dados"):
+        clear_streamlit_cache()
+        st.success("Cache limpo! Os dados serão recarregados.")
+        st.rerun()
+
     data_service = DataService()
 
     # --- Carregamento de Dados para Sincronização (SEM FILTROS) ---
@@ -268,6 +274,52 @@ def render_relatorio_entrevista():
         except Exception as e:
             st.error(f"Ocorreu um erro ao carregar os dados para análise: {e}")
             st.stop()
+
+    # Força e verifica o filtro localmente (redundância segura)
+    if df_entrevista_analise is not None and not df_entrevista_analise.empty:
+        if aplicar_filtro_data_criacao:
+            try:
+                # Usa dados brutos para calcular a data de criação corrigida (-6h) e filtrar por IDs
+                deals_raw, _uf_raw = data_service.get_raw_entrevista_data(None, None)
+                if isinstance(deals_raw, pd.DataFrame) and not deals_raw.empty and 'ID' in deals_raw.columns and 'DATE_CREATE' in deals_raw.columns:
+                    df_ids = deals_raw[['ID', 'DATE_CREATE']].copy()
+                    df_ids['ID'] = df_ids['ID'].astype(str).str.strip()
+                    df_ids['DATE_CREATE'] = pd.to_datetime(df_ids['DATE_CREATE'], errors='coerce')
+                    df_ids['DATE_CREATE_MINUS_6H_DATE'] = (df_ids['DATE_CREATE'] - pd.Timedelta(hours=6)).dt.date
+                    eligible_ids = set(
+                        df_ids[
+                            (df_ids['DATE_CREATE_MINUS_6H_DATE'] >= data_criacao_inicio) &
+                            (df_ids['DATE_CREATE_MINUS_6H_DATE'] <= data_criacao_fim)
+                        ]['ID'].astype(str)
+                    )
+
+                    # Filtra o DF processado pelos IDs elegíveis
+                    df_entrevista_analise['ID'] = df_entrevista_analise['ID'].astype(str).str.strip()
+                    df_entrevista_analise = df_entrevista_analise[df_entrevista_analise['ID'].isin(eligible_ids)].copy()
+                else:
+                    # Fallback: mantém o filtro pelo DATE_CREATE processado
+                    if 'DATE_CREATE' in df_entrevista_analise.columns:
+                        df_tmp = df_entrevista_analise.copy()
+                        df_tmp['DATE_CREATE'] = pd.to_datetime(df_tmp['DATE_CREATE'], errors='coerce')
+                        df_tmp_date = df_tmp['DATE_CREATE'].dt.date
+                        mask_local = (df_tmp_date >= data_criacao_inicio) & (df_tmp_date <= data_criacao_fim)
+                        df_entrevista_analise = df_entrevista_analise[mask_local].copy()
+            except Exception as _e:
+                # Em caso de falha, não quebra a página; tenta o filtro pelo processado
+                if 'DATE_CREATE' in df_entrevista_analise.columns:
+                    df_tmp = df_entrevista_analise.copy()
+                    df_tmp['DATE_CREATE'] = pd.to_datetime(df_tmp['DATE_CREATE'], errors='coerce')
+                    df_tmp_date = df_tmp['DATE_CREATE'].dt.date
+                    mask_local = (df_tmp_date >= data_criacao_inicio) & (df_tmp_date <= data_criacao_fim)
+                    df_entrevista_analise = df_entrevista_analise[mask_local].copy()
+
+        # Resumo pós-filtro
+        try:
+            min_dt = pd.to_datetime(df_entrevista_analise.get('DATE_CREATE'), errors='coerce').min()
+            max_dt = pd.to_datetime(df_entrevista_analise.get('DATE_CREATE'), errors='coerce').max()
+            st.caption(f"Registros após filtro: {len(df_entrevista_analise)} | Intervalo DATE_CREATE: {min_dt} ~ {max_dt}")
+        except Exception:
+            st.caption(f"Registros após filtro: {len(df_entrevista_analise)}")
             
     if df_entrevista_analise is None or df_entrevista_analise.empty:
         st.warning("Nenhum dado encontrado para o período selecionado.")

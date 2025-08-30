@@ -12,6 +12,11 @@ from .bitrix_connector import BitrixConnector, DateRange, BitrixDataCache
 from config.funis_config import FunilConfig, Category
 
 
+def clear_streamlit_cache():
+    """Limpa todo o cache de dados e de memória do Streamlit."""
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
 class DataService:
     """Serviço responsável por fornecer dados processados para os relatórios"""
     
@@ -185,11 +190,88 @@ class DataService:
     def get_entrevista_data(self, start_date: Optional[date] = None,
                            end_date: Optional[date] = None) -> pd.DataFrame:
         """Obtém dados específicos do funil de entrevista"""
+        # Quando houver filtro de data de criação, buscamos dados frescos (sem cache)
+        # diretamente do conector, processamos e filtramos localmente usando DATE_CREATE ajustada (-6h).
+        if start_date and end_date:
+            # Fetch fresh (no cache): usa diretamente o conector
+            deals_df_raw = self._connector.get_deals_data(
+                category_ids=[FunilConfig.ENTREVISTA_ID],
+                date_range=None
+            )
+            uf_df_raw = self._connector.get_deals_uf_data(date_range=None)
+
+            if deals_df_raw is None or not isinstance(deals_df_raw, pd.DataFrame) or deals_df_raw.empty:
+                return pd.DataFrame()
+
+            # Processa como no fluxo padrão
+            df_processed = self._process_deals_data(deals_df_raw, uf_df_raw if isinstance(uf_df_raw, pd.DataFrame) else pd.DataFrame())
+            if df_processed.empty:
+                return df_processed
+
+            # Filtra por data de criação (DATE_CREATE já ajustada em _calculate_metrics)
+            if 'DATE_CREATE' in df_processed.columns:
+                df_processed['DATE_CREATE'] = pd.to_datetime(df_processed['DATE_CREATE'], errors='coerce')
+                df_processed['DATE_CREATE_DATE'] = df_processed['DATE_CREATE'].dt.date
+                mask = (df_processed['DATE_CREATE_DATE'] >= start_date) & (df_processed['DATE_CREATE_DATE'] <= end_date)
+                df_processed = df_processed[mask].copy()
+                df_processed.drop(columns=['DATE_CREATE_DATE'], inplace=True, errors='ignore')
+
+            return df_processed
+        
+        # Sem filtro de data: usa cache normal
         return self.get_deals_by_category(
             category_ids=[FunilConfig.ENTREVISTA_ID],
             start_date=start_date,
             end_date=end_date
         )
+
+    def get_raw_comercial_data(self, start_date: Optional[date] = None,
+                               end_date: Optional[date] = None) -> (pd.DataFrame, pd.DataFrame):
+        """
+        Obtém os dados comerciais brutos (deals e uf_deals) sem processamento,
+        para fins de depuração.
+        """
+        date_range = None
+        if start_date and end_date:
+            date_range = DateRange(
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d')
+            )
+
+        deals_df_raw = self._connector.get_deals_data(
+            category_ids=[FunilConfig.COMERCIAL_ID],
+            date_range=date_range
+        )
+        
+        uf_df_raw = self._connector.get_deals_uf_data(
+            date_range=date_range
+        )
+
+        return deals_df_raw, uf_df_raw
+
+    def get_raw_entrevista_data(self, start_date: Optional[date] = None,
+                               end_date: Optional[date] = None) -> (pd.DataFrame, pd.DataFrame):
+        """
+        Obtém os dados de entrevista brutos (deals e uf_deals) sem processamento,
+        para fins de depuração.
+        """
+        date_range = None
+        if start_date and end_date:
+            date_range = DateRange(
+                start_date=start_date.strftime('%Y-%m-%d'),
+                end_date=end_date.strftime('%Y-%m-%d')
+            )
+
+        deals_df_raw = self._connector.get_deals_data(
+            category_ids=[FunilConfig.ENTREVISTA_ID],
+            date_range=date_range
+        )
+        
+        uf_df_raw = self._connector.get_deals_uf_data(
+            date_range=date_range
+        )
+
+        return deals_df_raw, uf_df_raw
 
     def get_all_funis_data(self, start_date: Optional[date] = None,
                           end_date: Optional[date] = None) -> pd.DataFrame:
@@ -335,9 +417,14 @@ class DataService:
         # Converte datas se necessário
         if 'DATE_CREATE' in df.columns:
             df['DATE_CREATE'] = pd.to_datetime(df['DATE_CREATE'], errors='coerce')
+            # AJUSTE DE FUSO HORÁRIO: Subtrai 6 horas para corrigir a diferença do servidor
+            if not df['DATE_CREATE'].isna().all():
+                df['DATE_CREATE'] = df['DATE_CREATE'] - pd.Timedelta(hours=6)
         
         if 'DATE_MODIFY' in df.columns:
             df['DATE_MODIFY'] = pd.to_datetime(df['DATE_MODIFY'], errors='coerce')
+            if not df['DATE_MODIFY'].isna().all():
+                df['DATE_MODIFY'] = df['DATE_MODIFY'] - pd.Timedelta(hours=6)
         
         # Calcula tempo no funil
         if 'DATE_CREATE' in df.columns:
