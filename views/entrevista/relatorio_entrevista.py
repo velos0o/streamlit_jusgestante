@@ -14,7 +14,7 @@ from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
 
-from src.data_service import DataService, clear_streamlit_cache
+from src.data_service import DataService
 from views.entrevista.analise_responsaveis_entrevista import render_analise_responsaveis_entrevista
 from views.entrevista.vendas_g7_tab import render_vendas_g7_tab, get_cached_g7_data, get_g7_deals_for_sync_check
 
@@ -232,12 +232,6 @@ def _render_sincronizacao_jusgestante_para_g7_alerta(df_entrevista: pd.DataFrame
 def render_relatorio_entrevista():
     """Renderiza um relatório consolidado com a análise de desempenho, as vendas da G7 e a análise de validação."""
     st.title("Relatório de Entrevista")
-
-    # Botão para limpar o cache
-    if st.sidebar.button("Limpar Cache e Recarregar Dados"):
-        clear_streamlit_cache()
-        st.success("Cache limpo! Os dados serão recarregados.")
-        st.rerun()
 
     data_service = DataService()
 

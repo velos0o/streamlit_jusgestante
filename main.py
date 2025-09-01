@@ -140,32 +140,32 @@ def render_sidebar_navigation():
         
         st.markdown("### 📊 Dashboards")
         
-        # Botão para selecionar o Relatório Comercial
-        if st.button("🏢 Relatório Comercial", key="relatorio_comercial_btn", use_container_width=True):
-            if st.session_state.get('pagina_selecionada') != "🏢 Relatório Comercial":
-                st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
-                new_url_param = PAGE_STATE_TO_URL_MAP.get("🏢 Relatório Comercial")
-                if new_url_param:
-                    st.query_params.pagina = new_url_param
-                st.rerun()
+        # # Botão para selecionar o Relatório Comercial
+        # if st.button("🏢 Relatório Comercial", key="relatorio_comercial_btn", use_container_width=True):
+        #     if st.session_state.get('pagina_selecionada') != "🏢 Relatório Comercial":
+        #         st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
+        #         new_url_param = PAGE_STATE_TO_URL_MAP.get("🏢 Relatório Comercial")
+        #         if new_url_param:
+        #             st.query_params.pagina = new_url_param
+        #         st.rerun()
             
-        # Novo Botão para Trâmites Administrativos
-        if st.button("📋 Trâmites Administrativos", key="relatorio_administrativo_btn", use_container_width=True):
-            if st.session_state.get('pagina_selecionada') != "📋 Trâmites Administrativos":
-                st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
-                new_url_param = PAGE_STATE_TO_URL_MAP.get("📋 Trâmites Administrativos")
-                if new_url_param:
-                    st.query_params.pagina = new_url_param
-                st.rerun()
+        # # Novo Botão para Trâmites Administrativos
+        # if st.button("📋 Trâmites Administrativos", key="relatorio_administrativo_btn", use_container_width=True):
+        #     if st.session_state.get('pagina_selecionada') != "📋 Trâmites Administrativos":
+        #         st.session_state.pagina_selecionada = "📋 Trâmites Administrativos"
+        #         new_url_param = PAGE_STATE_TO_URL_MAP.get("📋 Trâmites Administrativos")
+        #         if new_url_param:
+        #             st.query_params.pagina = new_url_param
+        #         st.rerun()
 
-        # Novo Botão para Relatório de Audiência
-        if st.button("⚖️ Relatório de Audiência", key="relatorio_audiencia_btn", use_container_width=True):
-            if st.session_state.get('pagina_selecionada') != "⚖️ Relatório de Audiência":
-                st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
-                new_url_param = PAGE_STATE_TO_URL_MAP.get("⚖️ Relatório de Audiência")
-                if new_url_param:
-                    st.query_params.pagina = new_url_param
-                st.rerun()
+        # # Novo Botão para Relatório de Audiência
+        # if st.button("⚖️ Relatório de Audiência", key="relatorio_audiencia_btn", use_container_width=True):
+        #     if st.session_state.get('pagina_selecionada') != "⚖️ Relatório de Audiência":
+        #         st.session_state.pagina_selecionada = "⚖️ Relatório de Audiência"
+        #         new_url_param = PAGE_STATE_TO_URL_MAP.get("⚖️ Relatório de Audiência")
+        #         if new_url_param:
+        #             st.query_params.pagina = new_url_param
+        #         st.rerun()
 
         # Botão para Relatório de Entrevista
         if st.button("🎙️ Relatório de Entrevista", key="relatorio_entrevista_btn", use_container_width=True):
@@ -176,14 +176,14 @@ def render_sidebar_navigation():
                     st.query_params.pagina = new_url_param
                 st.rerun()
 
-        # Botão para Relatório Financeiro
-        if st.button("💰 Relatório Financeiro", key="relatorio_financeiro_btn", use_container_width=True):
-            if st.session_state.get('pagina_selecionada') != "💰 Relatório Financeiro":
-                st.session_state.pagina_selecionada = "💰 Relatório Financeiro"
-                new_url_param = PAGE_STATE_TO_URL_MAP.get("💰 Relatório Financeiro")
-                if new_url_param:
-                    st.query_params.pagina = new_url_param
-                st.rerun()
+        # # Botão para Relatório Financeiro
+        # if st.button("💰 Relatório Financeiro", key="relatorio_financeiro_btn", use_container_width=True):
+        #     if st.session_state.get('pagina_selecionada') != "💰 Relatório Financeiro":
+        #         st.session_state.pagina_selecionada = "💰 Relatório Financeiro"
+        #         new_url_param = PAGE_STATE_TO_URL_MAP.get("💰 Relatório Financeiro")
+        #         if new_url_param:
+        #             st.query_params.pagina = new_url_param
+        #         st.rerun()
 
         # O estado da página é gerenciado via st.session_state
 
@@ -203,11 +203,11 @@ def main():
             # A mudança de estado será refletida naturalmente no fluxo da página.
     elif 'pagina_selecionada' not in st.session_state:
         # Prioridade 2: Se nenhum URL param válido e o estado não existe, definir padrão.
-        st.session_state.pagina_selecionada = "🏢 Relatório Comercial"
+        st.session_state.pagina_selecionada = "🎙️ Relatório de Entrevista"
 
     # Garantir que a URL reflita o estado atual (canônico)
     # Isso é útil se o estado foi definido por padrão ou se a URL estava "suja"
-    current_page_in_state = st.session_state.get('pagina_selecionada', "🏢 Relatório Comercial") # Default if somehow still not set
+    current_page_in_state = st.session_state.get('pagina_selecionada', "🎙️ Relatório de Entrevista") # Default if somehow still not set
     expected_url_param_for_state = PAGE_STATE_TO_URL_MAP.get(current_page_in_state)
 
     if expected_url_param_for_state and url_page_param != expected_url_param_for_state:

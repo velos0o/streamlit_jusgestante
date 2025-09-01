@@ -12,11 +12,6 @@ from .bitrix_connector import BitrixConnector, DateRange, BitrixDataCache
 from config.funis_config import FunilConfig, Category
 
 
-def clear_streamlit_cache():
-    """Limpa todo o cache de dados e de memória do Streamlit."""
-    st.cache_data.clear()
-    st.cache_resource.clear()
-
 class DataService:
     """Serviço responsável por fornecer dados processados para os relatórios"""
     
