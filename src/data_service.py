@@ -325,7 +325,8 @@ class DataService:
                 df['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df['UF_CRM_VALIDADO_DATA'], errors='coerce')
                 if not df['UF_CRM_VALIDADO_DATA'].isna().all():
                     df['UF_CRM_VALIDADO_DATA'] = df['UF_CRM_VALIDADO_DATA'] - pd.Timedelta(hours=6)
-                df['UF_CRM_VALIDADO_DATA'] = df['UF_CRM_VALIDADO_DATA'].dt.date
+                # Mantém como datetime para filtros precisos, converte para data apenas na exibição se necessário
+                # df['UF_CRM_VALIDADO_DATA'] = df['UF_CRM_VALIDADO_DATA'].dt.date
 
             # Converter a coluna de Data de Audiência (UF_CRM_1731693426655)
             DATA_AUDIENCIA_FIELD = 'UF_CRM_1731693426655'

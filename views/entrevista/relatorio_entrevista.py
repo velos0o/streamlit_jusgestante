@@ -386,15 +386,16 @@ def _render_analise_validacao(df_entrevista: pd.DataFrame):
     if aplicar_filtro_validacao:
         df_filtrado_val = df_validados.dropna(subset=['UF_CRM_VALIDADO_DATA'])
         if not df_filtrado_val.empty:
-            # Garante que a data no dataframe é um objeto date para comparação
-            # Ajusta o fuso horário (-6 horas) ao converter para datetime
+            # A data já vem ajustada do data_service. Apenas garanta que é datetime.
             df_filtrado_val['UF_CRM_VALIDADO_DATA'] = pd.to_datetime(df_filtrado_val['UF_CRM_VALIDADO_DATA'], errors='coerce')
-            if not df_filtrado_val['UF_CRM_VALIDADO_DATA'].isna().all():
-                df_filtrado_val['UF_CRM_VALIDADO_DATA'] = df_filtrado_val['UF_CRM_VALIDADO_DATA'] - pd.Timedelta(hours=6)
-            df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] = df_filtrado_val['UF_CRM_VALIDADO_DATA'].dt.date
+            
+            # Converte as datas do filtro para datetime para uma comparação correta
+            start_date_dt = datetime.combine(data_validacao_inicio, datetime.min.time())
+            end_date_dt = datetime.combine(data_validacao_fim, datetime.max.time())
+
             df_validados = df_filtrado_val[
-                (df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] >= data_validacao_inicio) &
-                (df_filtrado_val['UF_CRM_VALIDADO_DATA_DATE'] <= data_validacao_fim)
+                (df_filtrado_val['UF_CRM_VALIDADO_DATA'] >= start_date_dt) &
+                (df_filtrado_val['UF_CRM_VALIDADO_DATA'] <= end_date_dt)
             ]
 
     if df_validados.empty:
